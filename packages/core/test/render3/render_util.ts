@@ -16,6 +16,8 @@ import {RElement, RText, Renderer3, RendererFactory3, domRendererFactory3} from 
 
 import {getRendererFactory2} from './imported_renderer2';
 
+((global || window) as any).ngDevMode = true;
+
 export const document = ((global || window) as any).document;
 export let containerEl: HTMLElement = null !;
 let host: LElementNode|null;

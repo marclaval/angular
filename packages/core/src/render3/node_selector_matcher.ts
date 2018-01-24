@@ -6,8 +6,6 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import './ng_dev_mode';
-
 import {assertNotNull} from './assert';
 import {TNode, unusedValueExportToPlacateAjd as unused1} from './interfaces/node';
 import {CssSelector, CssSelectorWithNegations, SimpleCssSelector, unusedValueExportToPlacateAjd as unused2} from './interfaces/projection';

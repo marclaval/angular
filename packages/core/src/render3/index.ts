@@ -11,6 +11,11 @@ import {NgOnChangesFeature, PublicFeature, defineComponent, defineDirective} fro
 import {InjectFlags} from './di';
 import {ComponentDef, ComponentTemplate, ComponentType, DirectiveDef, DirectiveDefFlags, DirectiveType} from './interfaces/definition';
 
+declare global {
+  let ngDevMode: boolean;
+}
+
+
 export {InjectFlags, QUERY_READ_CONTAINER_REF, QUERY_READ_ELEMENT_REF, QUERY_READ_FROM_NODE, QUERY_READ_TEMPLATE_REF, inject, injectElementRef, injectTemplateRef, injectViewContainerRef} from './di';
 
 // Naming scheme:
@@ -68,7 +73,7 @@ export {
 
 export {
   QueryList,
-  
+
   query as Q,
   queryRefresh as qR,
 } from './query';
