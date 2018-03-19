@@ -18,18 +18,20 @@ import {ViewContainerRef as viewEngine_ViewContainerRef} from '../linker/view_co
 import {EmbeddedViewRef as viewEngine_EmbeddedViewRef, ViewRef as viewEngine_ViewRef} from '../linker/view_ref';
 import {Type} from '../type';
 
-import {assertLessThan, assertNotNull} from './assert';
-import {assertPreviousIsParent, getDirectiveInstance, getPreviousOrParentNode, getRenderer, renderEmbeddedTemplate} from './instructions';
-import {ComponentTemplate, DirectiveDef} from './interfaces/definition';
+import {assertLessThan, assertNotNull, assertGreaterThan} from './assert';
+import {assertPreviousIsParent, getDirectiveInstance, getPreviousOrParentNode, getRenderer, renderEmbeddedTemplate, createLNode, containerForVCRef} from './instructions';
+import {ComponentTemplate, DirectiveDef, ComponentDef, ComponentType} from './interfaces/definition';
 import {LInjector} from './interfaces/injector';
 import {LContainerNode, LElementNode, LNode, LNodeType, LViewNode, TNodeFlags} from './interfaces/node';
 import {QueryReadType} from './interfaces/query';
 import {Renderer3} from './interfaces/renderer';
 import {LView} from './interfaces/view';
 import {assertNodeOfPossibleTypes, assertNodeType} from './node_assert';
-import {insertView} from './node_manipulation';
+import {insertView, canInsertNativeNode, removeView} from './node_manipulation';
 import {notImplemented, stringify} from './util';
 import {EmbeddedViewRef, ViewRef, addDestroyable, createViewRef} from './view_ref';
+import { LContainer } from './interfaces/container';
+import { createComponentRef } from '.';
 
 
 
@@ -553,8 +555,9 @@ class ElementRef implements viewEngine_ElementRef {
  * @returns The ViewContainerRef instance to use
  */
 export function getOrCreateContainerRef(di: LInjector): viewEngine_ViewContainerRef {
-  return di.viewContainerRef ||
-      (di.viewContainerRef = new ViewContainerRef(di.node as LContainerNode));
+  if (di.viewContainerRef)
+    return di.viewContainerRef;
+  return di.viewContainerRef = new ViewContainerRef(containerForVCRef(di.node as LElementNode));
 }
 
 /**
@@ -565,12 +568,22 @@ class ViewContainerRef implements viewEngine_ViewContainerRef {
   element: viewEngine_ElementRef;
   injector: Injector;
   parentInjector: Injector;
+  private _viewMap: Map<LViewNode, viewEngine_ViewRef> = new Map<LViewNode, viewEngine_ViewRef>();
 
-  constructor(private _node: LContainerNode) {}
+  constructor(private _lContainerNode: LContainerNode) {}
 
-  clear(): void { throw notImplemented(); }
-  get(index: number): viewEngine_ViewRef|null { throw notImplemented(); }
-  length: number;
+  clear(): void {
+    const lContainer = this._lContainerNode.data;
+    while (lContainer.views.length) {
+      removeView(this._lContainerNode, 0);
+    }
+  }
+  get(index: number): viewEngine_ViewRef|null {
+    return this._viewMap.get(this._lContainerNode.data.views[index]) || null;
+  }
+  get length(): number {
+    return this._lContainerNode.data.views.length;
+  }
   createEmbeddedView<C>(
       templateRef: viewEngine_TemplateRef<C>, context?: C|undefined,
       index?: number|undefined): viewEngine_EmbeddedViewRef<C> {
@@ -582,17 +595,17 @@ class ViewContainerRef implements viewEngine_ViewContainerRef {
       componentFactory: viewEngine_ComponentFactory<C>, index?: number|undefined,
       injector?: Injector|undefined, projectableNodes?: any[][]|undefined,
       ngModule?: viewEngine_NgModuleRef<any>|undefined): viewEngine_ComponentRef<C> {
-    throw notImplemented();
+      const componentRef = componentFactory.create(injector || this.injector);
+      this.insert(componentRef.hostView, index);
+      return componentRef;
   }
   insert(viewRef: viewEngine_ViewRef, index?: number|undefined): viewEngine_ViewRef {
-    if (index == null) {
-      index = this._node.data.views.length;
-    } else {
-      // +1 because it's legal to insert at the end.
-      ngDevMode && assertLessThan(index, this._node.data.views.length + 1, 'index');
-    }
-    const lView = (viewRef as EmbeddedViewRef<any>)._lViewNode;
-    insertView(this._node, lView, index);
+    const lViewNode = (viewRef as EmbeddedViewRef<any>)._lViewNode;
+    this._viewMap.set(lViewNode, viewRef);
+    insertView(this._lContainerNode, lViewNode, this._adjustAndAssertIndex(index));
+
+    // Pawel's hack
+    (lViewNode as any).parent = this._lContainerNode;
 
     // TODO(pk): this is a temporary index adjustment so imperativelly inserted (through
     // ViewContainerRef) views
@@ -601,29 +614,68 @@ class ViewContainerRef implements viewEngine_ViewContainerRef {
     // ViewContainerRef.
     // Such container should not be trimmed as it is the case in the containerRefreshEnd
     // instruction.
-    this._node.data.nextIndex = this._node.data.views.length;
+    this._lContainerNode.data.nextIndex = this._lContainerNode.data.views.length;
 
     // If the view is dynamic (has a template), it needs to be counted both at the container
     // level and at the node above the container.
-    if (lView.data.template !== null) {
+    if (lViewNode.data.template !== null) {
       // Increment the container view count.
-      this._node.data.dynamicViewCount++;
+      this._lContainerNode.data.dynamicViewCount++;
 
       // Look for the parent node and increment its dynamic view count.
-      if (this._node.parent !== null && this._node.parent.data !== null) {
+      if (this._lContainerNode.parent !== null && this._lContainerNode.parent.data !== null) {
         ngDevMode &&
-            assertNodeOfPossibleTypes(this._node.parent, LNodeType.View, LNodeType.Element);
-        this._node.parent.data.dynamicViewCount++;
+            assertNodeOfPossibleTypes(this._lContainerNode.parent, LNodeType.View, LNodeType.Element);
+        this._lContainerNode.parent.data.dynamicViewCount++;
       }
     }
     return viewRef;
   }
   move(viewRef: viewEngine_ViewRef, currentIndex: number): viewEngine_ViewRef {
-    throw notImplemented();
+    const index = this.indexOf(viewRef);
+    this.detach(index);
+    this.insert(viewRef, this._adjustAndAssertIndex(currentIndex));
+    return viewRef;
   }
-  indexOf(viewRef: viewEngine_ViewRef): number { throw notImplemented(); }
-  remove(index?: number|undefined): void { throw notImplemented(); }
-  detach(index?: number|undefined): viewEngine_ViewRef|null { throw notImplemented(); }
+  indexOf(viewRef: viewEngine_ViewRef): number {
+    return this._lContainerNode.data.views.indexOf((viewRef as EmbeddedViewRef<any>)._lViewNode);
+  }
+  remove(index?: number|undefined): void {
+    this.detach(index);
+    //TODO: destroy the view
+  }
+  detach(index?: number|undefined): viewEngine_ViewRef|null {
+    const adjustedIndex = this._adjustAndAssertIndex(index, -1);
+    const lViewNode = removeView(this._lContainerNode, adjustedIndex);
+    (lViewNode as any).parent = null;
+    const viewRef = this._viewMap.get(lViewNode);
+    this._viewMap.delete(lViewNode);
+    // If the view is dynamic (has a template), it needs to be counted both at the container
+    // level and at the node above the container.
+    if (lViewNode.data.template !== null) {
+      // Decrement the container view count.
+      this._lContainerNode.data.dynamicViewCount--;
+
+      // Look for the parent node and decrement its dynamic view count.
+      if (this._lContainerNode.parent !== null && this._lContainerNode.parent.data !== null) {
+        ngDevMode &&
+            assertNodeOfPossibleTypes(this._lContainerNode.parent, LNodeType.View, LNodeType.Element);
+        this._lContainerNode.parent.data.dynamicViewCount--;
+      }
+    }
+    return viewRef || null;
+  }
+
+  private _adjustAndAssertIndex(index?: number|undefined, shift: number = 0) {
+    if (index == null) {
+      index = this._lContainerNode.data.views.length + shift;
+    } else {
+      ngDevMode && assertGreaterThan(index, -1, 'index must be positive');
+      // +1 because it's legal to insert at the end.
+      ngDevMode && assertLessThan(index, this._lContainerNode.data.views.length + 1, 'index');
+    }
+    return index;
+  }
 }
 
 /**
@@ -655,4 +707,42 @@ class TemplateRef<T> implements viewEngine_TemplateRef<T> {
     let viewNode: LViewNode = renderEmbeddedTemplate(null, this._template, context, this._renderer);
     return addDestroyable(new EmbeddedViewRef(viewNode, this._template, context));
   }
+}
+
+export function createTemplateRef<T>(template: ComponentTemplate<T>): viewEngine_TemplateRef<T> {
+  return new TemplateRef<T>(new ElementRef(null), template, getRenderer());
+}
+
+class ComponentFactory<C> implements viewEngine_ComponentFactory<C> {
+  constructor(private _componentType: ComponentType<C>) {}
+
+  get selector(): string {
+    return this._componentType.ngComponentDef.tag;
+  }
+
+  get componentType(): Type<any> {
+    return this._componentType;
+  }
+
+  get ngContentSelectors(): string[] {
+    return [];
+  }
+
+  get inputs(): {propName: string, templateName: string}[] {
+    return [];
+  }
+
+  get outputs(): {propName: string, templateName: string}[] {
+    return [];
+  }
+
+  create(
+    injector: Injector, projectableNodes?: any[][], rootSelectorOrNode?: string|any,
+    ngModule?: viewEngine_NgModuleRef<any>): viewEngine_ComponentRef<C> {
+      return createComponentRef(this._componentType, {injector: injector});
+    }
+}
+
+export function createComponentFactory<C>(componentType: ComponentType<C>): viewEngine_ComponentFactory<C> {
+  return new ComponentFactory(componentType);
 }

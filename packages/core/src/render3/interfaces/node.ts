@@ -118,6 +118,11 @@ export interface LNode {
    * data about this node.
    */
   tNode: TNode|null;
+
+  /**
+   * Pointer to the dynamucally created container.
+   */
+  dynamicContainer: LContainerNode|null;
 }
 
 

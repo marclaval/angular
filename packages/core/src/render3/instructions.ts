@@ -308,7 +308,7 @@ export function createLNode(
 export function createLNode(
     index: null, type: LNodeType.View, native: null, lView: LView): LViewNode;
 export function createLNode(
-    index: number, type: LNodeType.Container, native: undefined,
+    index: number | null, type: LNodeType.Container, native: undefined,
     lContainer: LContainer): LContainerNode;
 export function createLNode(
     index: number, type: LNodeType.Projection, native: null,
@@ -334,7 +334,8 @@ export function createLNode(
     data: isState ? state as any : null,
     queries: queries,
     tNode: null,
-    pNextOrParent: null
+    pNextOrParent: null,
+    dynamicContainer: null
   };
 
   if ((type & LNodeType.ViewOrElement) === LNodeType.ViewOrElement && isState) {
@@ -435,8 +436,10 @@ export function renderEmbeddedTemplate<T>(
     enterView(viewNode.data, viewNode);
 
     template(context, cm);
-    refreshDynamicChildren();
-    refreshDirectives();
+    if (!cm) {
+      refreshDynamicChildren();
+      refreshDirectives();
+    }
   } finally {
     leaveView(currentView !.parent !);
     isParent = _isParent;
@@ -786,6 +789,9 @@ export function elementEnd() {
   const queries = previousOrParentNode.queries;
   queries && queries.addNode(previousOrParentNode);
   queueLifecycleHooks(previousOrParentNode.tNode !.flags, currentView);
+  if (previousOrParentNode.dynamicContainer) {
+    previousOrParentNode = previousOrParentNode.dynamicContainer;
+  }
 }
 
 /**
@@ -1296,6 +1302,35 @@ export function container(
     // prepare place for matching nodes from views inserted into a given container
     lContainer.queries = queries.container();
   }
+  if (previousOrParentNode.dynamicContainer) {
+    previousOrParentNode = previousOrParentNode.dynamicContainer;
+  }
+}
+
+export function containerForVCRef(node: LElementNode|LContainerNode): LContainerNode {
+  const lContainer = <LContainer>{
+    views: [],
+    nextIndex: 0,
+    // If the direct parent of the container is a view, its views will need to be added
+    // through insertView() when its parent view is being inserted:
+    renderParent: canInsertNativeNode(node.parent !, node.view) ? node.parent ! : null,
+    template: null,
+    next: null,
+    parent: node.view,
+    dynamicViewCount: 0,
+    queries: null
+  };
+  const _isParent = isParent;
+  const _previousOrParentNode = previousOrParentNode;
+  isParent = false;
+  previousOrParentNode = node;
+  const container = createLNode(null, LNodeType.Container, undefined, lContainer);
+  addToViewTree(container.data);
+  node.next = container;
+  node.dynamicContainer = container;
+  isParent = _isParent;
+  previousOrParentNode = _previousOrParentNode;
+  return container;
 }
 
 /** Retrieves the next directive index to write */
@@ -1534,14 +1569,16 @@ export function projectionDef(
     // execute selector matching logic if and only if:
     // - there are selectors defined
     // - a node has a tag name / attributes that can be matched
+    let matchedIdx = 0;
     if (selectors && componentChild.tNode) {
-      const matchedIdx = matchingSelectorIndex(componentChild.tNode, selectors, textSelectors !);
-      distributedNodes[matchedIdx].push(componentChild);
-    } else {
-      distributedNodes[0].push(componentChild);
+      matchedIdx = matchingSelectorIndex(componentChild.tNode, selectors, textSelectors !);
     }
-
-    componentChild = componentChild.next;
+    distributedNodes[matchedIdx].push(componentChild);
+    if (componentChild.dynamicContainer) {
+      distributedNodes[matchedIdx].push(componentChild.dynamicContainer);
+      componentChild = componentChild.next;
+    }
+    componentChild = componentChild ? componentChild.next : null;
   }
 
   ngDevMode && assertDataNext(index);
@@ -1837,8 +1874,8 @@ export function detectChangesInternal<T>(
   const oldView = enterView(hostView, hostNode);
   try {
     template(component, creationMode);
-    refreshDynamicChildren();
     refreshDirectives();
+    refreshDynamicChildren();
   } finally {
     leaveView(oldView);
   }
