@@ -6,12 +6,14 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+ import {Renderer2} from '../core';
+
 import {assertDefined} from './assert';
 import {callHooks} from './hooks';
 import {LContainer, RENDER_PARENT, VIEWS, unusedValueExportToPlacateAjd as unused1} from './interfaces/container';
 import {LContainerNode, LElementContainerNode, LElementNode, LNode, LProjectionNode, LTextNode, LViewNode, TNode, TNodeFlags, TNodeType, unusedValueExportToPlacateAjd as unused2} from './interfaces/node';
 import {unusedValueExportToPlacateAjd as unused3} from './interfaces/projection';
-import {ProceduralRenderer3, RComment, RElement, RNode, RText, Renderer3, isProceduralRenderer, unusedValueExportToPlacateAjd as unused4} from './interfaces/renderer';
+import {RComment, RElement, RNode, RText, unusedValueExportToPlacateAjd as unused4} from './interfaces/renderer';
 import {CLEANUP, CONTAINER_INDEX, DIRECTIVES, FLAGS, HEADER_OFFSET, HOST_NODE, HookData, LViewData, LViewFlags, NEXT, PARENT, QUERIES, RENDERER, TVIEW, unusedValueExportToPlacateAjd as unused5} from './interfaces/view';
 import {assertNodeOfPossibleTypes, assertNodeType} from './node_assert';
 import {readElementValue, stringify} from './util';
@@ -102,7 +104,7 @@ const projectionNodeStack: LProjectionNode[] = [];
  * Insert.
  */
 function walkLNodeTree(
-    startingNode: LNode | null, rootNode: LNode, action: WalkLNodeTreeAction, renderer: Renderer3,
+    startingNode: LNode | null, rootNode: LNode, action: WalkLNodeTreeAction, renderer: Renderer2,
     renderParentNode?: LElementNode | null, beforeNode?: RNode | null) {
   let node: LNode|null = startingNode;
   let projectionNodeIndex = -1;
@@ -204,25 +206,20 @@ export function findComponentHost(lViewData: LViewData): LElementNode {
  * being passed as an argument.
  */
 function executeNodeAction(
-    action: WalkLNodeTreeAction, renderer: Renderer3, parent: RElement | null,
+    action: WalkLNodeTreeAction, renderer: Renderer2, parent: RElement | null,
     node: RComment | RElement | RText, beforeNode?: RNode | null) {
   if (action === WalkLNodeTreeAction.Insert) {
-    isProceduralRenderer(renderer !) ?
-        (renderer as ProceduralRenderer3).insertBefore(parent !, node, beforeNode as RNode | null) :
-        parent !.insertBefore(node, beforeNode as RNode | null, true);
+    renderer.insertBefore(parent !, node, beforeNode as RNode | null);
   } else if (action === WalkLNodeTreeAction.Detach) {
-    isProceduralRenderer(renderer !) ?
-        (renderer as ProceduralRenderer3).removeChild(parent !, node) :
-        parent !.removeChild(node);
+    renderer.removeChild(parent !, node);
   } else if (action === WalkLNodeTreeAction.Destroy) {
     ngDevMode && ngDevMode.rendererDestroyNode++;
-    (renderer as ProceduralRenderer3).destroyNode !(node);
+    renderer.destroyNode !(node);
   }
 }
 
-export function createTextNode(value: any, renderer: Renderer3): RText {
-  return isProceduralRenderer(renderer) ? renderer.createText(stringify(value)) :
-                                          renderer.createTextNode(stringify(value));
+export function createTextNode(value: any, renderer: Renderer2): RText {
+  return renderer.createText(stringify(value));
 }
 
 /**
@@ -418,7 +415,7 @@ export function getLViewChild(viewData: LViewData): LViewData|LContainer|null {
  */
 export function destroyLView(view: LViewData) {
   const renderer = view[RENDERER];
-  if (isProceduralRenderer(renderer) && renderer.destroyNode) {
+  if (renderer.destroyNode) {
     walkLNodeTree(view[HOST_NODE], view[HOST_NODE], WalkLNodeTreeAction.Destroy, renderer);
   }
   destroyViewTree(view);
@@ -463,9 +460,9 @@ function cleanUpView(viewOrContainer: LViewData | LContainer): void {
     executeOnDestroys(view);
     executePipeOnDestroys(view);
     // For component views only, the local renderer is destroyed as clean up time.
-    if (view[TVIEW].id === -1 && isProceduralRenderer(view[RENDERER])) {
+    if (view[TVIEW].id === -1) {
       ngDevMode && ngDevMode.rendererDestroy++;
-      (view[RENDERER] as ProceduralRenderer3).destroy();
+      view[RENDERER].destroy();
     }
   }
 }
@@ -614,12 +611,8 @@ export function canInsertNativeNode(parent: LNode, currentView: LViewData): bool
  * actual renderer being used.
  */
 function nativeInsertBefore(
-    renderer: Renderer3, parent: RElement, child: RNode, beforeNode: RNode | null): void {
-  if (isProceduralRenderer(renderer)) {
+    renderer: Renderer2, parent: RElement, child: RNode, beforeNode: RNode | null): void {
     renderer.insertBefore(parent, child, beforeNode);
-  } else {
-    parent.insertBefore(child, beforeNode, true);
-  }
 }
 
 /**
@@ -656,8 +649,7 @@ export function appendChild(parent: LNode, child: RNode | null, currentView: LVi
         nativeInsertBefore(renderer, (grandParent as LElementNode).native, child, beforeNode);
       }
     } else {
-      isProceduralRenderer(renderer) ? renderer.appendChild(parent.native !as RElement, child) :
-                                       parent.native !.appendChild(child);
+      renderer.appendChild(parent.native !as RElement, child);
     }
     return true;
   }
@@ -676,8 +668,7 @@ export function removeChild(parent: LNode, child: RNode | null, currentView: LVi
   if (child !== null && canInsertNativeNode(parent, currentView)) {
     // We only remove the element if not in View or not projected.
     const renderer = currentView[RENDERER];
-    isProceduralRenderer(renderer) ? renderer.removeChild(parent.native as RElement, child) :
-                                     parent.native !.removeChild(child);
+    renderer.removeChild(parent.native as RElement, child);
     return true;
   }
   return false;

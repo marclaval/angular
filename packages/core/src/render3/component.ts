@@ -8,7 +8,7 @@
 
 // We are temporarily importing the existing viewEngine from core so we can be sure we are
 // correctly implementing its interfaces for backwards compatibility.
-import {Type} from '../core';
+import {RendererFactory2, Type} from '../core';
 import {Injector} from '../di/injector';
 import {Sanitizer} from '../sanitization/security';
 
@@ -17,7 +17,7 @@ import {queueInitHooks, queueLifecycleHooks} from './hooks';
 import {CLEAN_PROMISE, ROOT_DIRECTIVE_INDICES, _getComponentHostLElementNode, baseDirectiveCreate, createLViewData, createTView, detectChangesInternal, enterView, executeInitAndContentHooks, getRootView, hostElement, initChangeDetectorIfExisting, leaveView, locateHostElement, setHostBindings,} from './instructions';
 import {ComponentDef, ComponentDefInternal, ComponentType} from './interfaces/definition';
 import {LElementNode} from './interfaces/node';
-import {RElement, RendererFactory3, domRendererFactory3} from './interfaces/renderer';
+import {RElement, ivyDomRendererFactory} from './interfaces/renderer';
 import {LViewData, LViewFlags, RootContext, INJECTOR, CONTEXT, TVIEW} from './interfaces/view';
 import {stringify} from './util';
 
@@ -25,7 +25,7 @@ import {stringify} from './util';
 /** Options that control how the component should be bootstrapped. */
 export interface CreateComponentOptions {
   /** Which renderer factory to use. */
-  rendererFactory?: RendererFactory3;
+  rendererFactory?: RendererFactory2;
 
   /** A custom sanitizer instance */
   sanitizer?: Sanitizer;
@@ -94,7 +94,7 @@ export function renderComponent<T>(
     ,
     opts: CreateComponentOptions = {}): T {
   ngDevMode && assertComponentType(componentType);
-  const rendererFactory = opts.rendererFactory || domRendererFactory3;
+  const rendererFactory = opts.rendererFactory || ivyDomRendererFactory;
   const sanitizer = opts.sanitizer || null;
   const componentDef =
       (componentType as ComponentType<T>).ngComponentDef as ComponentDefInternal<T>;

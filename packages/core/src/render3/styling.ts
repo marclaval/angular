@@ -6,10 +6,10 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+import {Renderer2, RendererStyleFlags2} from '../render/api';
 import {StyleSanitizeFn} from '../sanitization/style_sanitizer';
 import {InitialStylingFlags} from './interfaces/definition';
 import {LElementNode} from './interfaces/node';
-import {Renderer3, RendererStyleFlags3, isProceduralRenderer} from './interfaces/renderer';
 
 
 /**
@@ -584,7 +584,7 @@ export function updateClassProp(
  *    to this key/value map instead of being renderered via the renderer.
  */
 export function renderStyling(
-    context: StylingContext, renderer: Renderer3, styleStore?: {[key: string]: any},
+    context: StylingContext, renderer: Renderer2, styleStore?: {[key: string]: any},
     classStore?: {[key: string]: boolean}) {
   if (isContextDirty(context)) {
     const native = context[StylingIndex.ElementPosition] !.native;
@@ -648,21 +648,17 @@ export function renderStyling(
  * @param store an optional key/value map that will be used as a context to render styles on
  */
 function setStyle(
-    native: any, prop: string, value: string | null, renderer: Renderer3,
+    native: any, prop: string, value: string | null, renderer: Renderer2,
     sanitizer: StyleSanitizeFn | null, store?: {[key: string]: any}) {
   value = sanitizer && value ? sanitizer(prop, value) : value;
   if (store) {
     store[prop] = value;
   } else if (value) {
     ngDevMode && ngDevMode.rendererSetStyle++;
-    isProceduralRenderer(renderer) ?
-        renderer.setStyle(native, prop, value, RendererStyleFlags3.DashCase) :
-        native['style'].setProperty(prop, value);
+    renderer.setStyle(native, prop, value, RendererStyleFlags2.DashCase);
   } else {
     ngDevMode && ngDevMode.rendererRemoveStyle++;
-    isProceduralRenderer(renderer) ?
-        renderer.removeStyle(native, prop, RendererStyleFlags3.DashCase) :
-        native['style'].removeProperty(prop);
+    renderer.removeStyle(native, prop, RendererStyleFlags2.DashCase);
   }
 }
 
@@ -679,18 +675,16 @@ function setStyle(
  * @param store an optional key/value map that will be used as a context to render styles on
  */
 function setClass(
-    native: any, className: string, add: boolean, renderer: Renderer3,
+    native: any, className: string, add: boolean, renderer: Renderer2,
     store?: {[key: string]: boolean}) {
   if (store) {
     store[className] = add;
   } else if (add) {
     ngDevMode && ngDevMode.rendererAddClass++;
-    isProceduralRenderer(renderer) ? renderer.addClass(native, className) :
-                                     native['classList'].add(className);
+    renderer.addClass(native, className);
   } else {
     ngDevMode && ngDevMode.rendererRemoveClass++;
-    isProceduralRenderer(renderer) ? renderer.removeClass(native, className) :
-                                     native['classList'].remove(className);
+    renderer.removeClass(native, className);
   }
 }
 

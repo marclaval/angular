@@ -8,12 +8,12 @@
 
 import {withBody} from '@angular/private/testing';
 
-import {ChangeDetectionStrategy, ChangeDetectorRef, DoCheck, RendererType2} from '../../src/core';
+import {ChangeDetectionStrategy, ChangeDetectorRef, DoCheck, Renderer2, RendererType2, RendererFactory2} from '../../src/core';
 import {getRenderedText, whenRendered} from '../../src/render3/component';
 import {LifecycleHooksFeature, defineComponent, defineDirective, injectChangeDetectorRef} from '../../src/render3/index';
 import {bind, container, containerRefreshEnd, containerRefreshStart, detectChanges, element, elementEnd, elementProperty, elementStart, embeddedViewEnd, embeddedViewStart, interpolation1, interpolation2, listener, markDirty, text, textBinding, tick} from '../../src/render3/instructions';
 import {RenderFlags} from '../../src/render3/interfaces/definition';
-import {RElement, Renderer3, RendererFactory3} from '../../src/render3/interfaces/renderer';
+import {RElement, ivyDomRenderer} from '../../src/render3/interfaces/renderer';
 
 import {containerEl, createComponent, renderComponent, requestAnimationFrame} from './render_util';
 
@@ -420,7 +420,7 @@ describe('change detection', () => {
             element(1, 'div', ['dir', '']);
           }
           if (rf & RenderFlags.Update) {
-            textBinding(1, bind(ctx.value));
+            textBinding(0, bind(ctx.value));
           }
         }, [Dir]);
 
@@ -1047,9 +1047,9 @@ describe('change detection', () => {
   it('should call begin and end when the renderer factory implements them', () => {
     const log: string[] = [];
 
-    const testRendererFactory: RendererFactory3 = {
+    const testRendererFactory: RendererFactory2 = {
       createRenderer: (hostElement: RElement | null, rendererType: RendererType2 | null):
-                          Renderer3 => { return document; },
+                          Renderer2 => { return ivyDomRenderer },
       begin: () => log.push('begin'),
       end: () => log.push('end'),
     };

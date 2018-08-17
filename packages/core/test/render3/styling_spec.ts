@@ -5,10 +5,10 @@
  * Use of this source code is governed by an MIT-style license that can be
  * found in the LICENSE file at https://angular.io/license
  */
+import {Renderer2} from '@angular/core';
 import {elementEnd, elementStart, elementStyleProp, elementStyling, elementStylingApply, elementStylingMap} from '../../src/render3/instructions';
 import {InitialStylingFlags, RenderFlags} from '../../src/render3/interfaces/definition';
 import {LElementNode} from '../../src/render3/interfaces/node';
-import {Renderer3} from '../../src/render3/interfaces/renderer';
 import {StylingContext, StylingFlags, StylingIndex, allocStylingContext, createStylingContextTemplate, isContextDirty, renderStyling as _renderStyling, setContextDirty, updateClassProp, updateStyleProp, updateStylingMap} from '../../src/render3/styling';
 import {defaultStyleSanitizer} from '../../src/sanitization/sanitization';
 import {StyleSanitizeFn} from '../../src/sanitization/style_sanitizer';
@@ -25,24 +25,24 @@ describe('styling', () => {
     return allocStylingContext(element, createStylingContextTemplate(classes, styles, sanitizer));
   }
 
-  function renderStyles(context: StylingContext, renderer?: Renderer3) {
+  function renderStyles(context: StylingContext, renderer?: Renderer2) {
     const styles: {[key: string]: any} = {};
-    _renderStyling(context, (renderer || {}) as Renderer3, styles);
+    _renderStyling(context, (renderer || {}) as Renderer2, styles);
     return styles;
   }
 
   function trackStylesFactory() {
     const styles: {[key: string]: any} = {};
-    return function(context: StylingContext, renderer?: Renderer3): {[key: string]: any} {
-      _renderStyling(context, (renderer || {}) as Renderer3, styles);
+    return function(context: StylingContext, renderer?: Renderer2): {[key: string]: any} {
+      _renderStyling(context, (renderer || {}) as Renderer2, styles);
       return styles;
     };
   }
 
   function trackClassesFactory() {
     const classes: {[className: string]: boolean} = {};
-    return function(context: StylingContext, renderer?: Renderer3): {[key: string]: any} {
-      _renderStyling(context, (renderer || {}) as Renderer3, {}, classes);
+    return function(context: StylingContext, renderer?: Renderer2): {[key: string]: any} {
+      _renderStyling(context, (renderer || {}) as Renderer2, {}, classes);
       return classes;
     };
   }
@@ -50,8 +50,8 @@ describe('styling', () => {
   function trackStylesAndClasses() {
     const classes: {[className: string]: boolean} = {};
     const styles: {[prop: string]: any} = {};
-    return function(context: StylingContext, renderer?: Renderer3): {[key: string]: any} {
-      _renderStyling(context, (renderer || {}) as Renderer3, styles, classes);
+    return function(context: StylingContext, renderer?: Renderer2): {[key: string]: any} {
+      _renderStyling(context, (renderer || {}) as Renderer2, styles, classes);
       return [styles, classes];
     };
   }

@@ -8,6 +8,7 @@
 
 import './ng_dev_mode';
 
+import {Renderer2, RendererFactory2} from '../core';
 import {QueryList} from '../linker';
 import {Sanitizer} from '../sanitization/security';
 import {StyleSanitizeFn} from '../sanitization/style_sanitizer';
@@ -21,7 +22,7 @@ import {LInjector} from './interfaces/injector';
 import {AttributeMarker, InitialInputData, InitialInputs, LContainerNode, LElementContainerNode, LElementNode, LNode, LProjectionNode, LTextNode, LViewNode, PropertyAliasValue, PropertyAliases, TAttributes, TContainerNode, TElementNode, TNode, TNodeFlags, TNodeType} from './interfaces/node';
 import {CssSelectorList, NG_PROJECT_AS_ATTR_NAME} from './interfaces/projection';
 import {LQueries} from './interfaces/query';
-import {ProceduralRenderer3, RComment, RElement, RText, Renderer3, RendererFactory3, RendererStyleFlags3, isProceduralRenderer} from './interfaces/renderer';
+import {RComment, RElement, RText} from './interfaces/renderer';
 import {BINDING_INDEX, CLEANUP, CONTENT_QUERIES, CONTEXT, CurrentMatchesList, DECLARATION_VIEW, DIRECTIVES, FLAGS, HEADER_OFFSET, HOST_NODE, INJECTOR, LViewData, LViewFlags, NEXT, OpaqueViewState, PARENT, QUERIES, RENDERER, RootContext, SANITIZER, TAIL, TData, TVIEW, TView} from './interfaces/view';
 import {assertNodeOfPossibleTypes, assertNodeType} from './node_assert';
 import {appendChild, appendProjectedNode, canInsertNativeNode, createTextNode, findComponentHost, getChildLNode, getLViewChild, getNextLNode, getParentLNode, insertView, removeView} from './node_manipulation';
@@ -93,16 +94,16 @@ export const CIRCULAR = '__CIRCULAR__';
  * that enables element manipulation. This also facilitates backwards compatibility with
  * Renderer2.
  */
-let renderer: Renderer3;
+let renderer: Renderer2;
 
-export function getRenderer(): Renderer3 {
+export function getRenderer(): Renderer2 {
   // top level variables should not be exported for performance reasons (PERF_NOTES.md)
   return renderer;
 }
 
-let rendererFactory: RendererFactory3;
+let rendererFactory: RendererFactory2;
 
-export function getRendererFactory(): RendererFactory3 {
+export function getRendererFactory(): RendererFactory2 {
   // top level variables should not be exported for performance reasons (PERF_NOTES.md)
   return rendererFactory;
 }
@@ -367,7 +368,7 @@ export function executeInitAndContentHooks(): void {
 }
 
 export function createLViewData<T>(
-    renderer: Renderer3, tView: TView, context: T | null, flags: LViewFlags,
+    renderer: Renderer2, tView: TView, context: T | null, flags: LViewFlags,
     sanitizer?: Sanitizer | null): LViewData {
   return [
     tView,                                                                       // tView
@@ -525,7 +526,7 @@ export function resetApplicationState() {
  */
 export function renderTemplate<T>(
     hostNode: RElement, templateFn: ComponentTemplate<T>, context: T,
-    providedRendererFactory: RendererFactory3, host: LElementNode | null,
+    providedRendererFactory: RendererFactory2, host: LElementNode | null,
     directives?: DirectiveDefListOrFactory | null, pipes?: PipeDefListOrFactory | null,
     sanitizer?: Sanitizer | null): LElementNode {
   if (host == null) {
@@ -550,7 +551,7 @@ export function renderTemplate<T>(
  * Such lViewNode will then be renderer with renderEmbeddedTemplate() (see below).
  */
 export function createEmbeddedViewNode<T>(
-    tView: TView, context: T, declarationView: LViewData, renderer: Renderer3,
+    tView: TView, context: T, declarationView: LViewData, renderer: Renderer2,
     queries?: LQueries | null): LViewNode {
   const _isParent = isParent;
   const _previousOrParentNode = previousOrParentNode;
@@ -793,19 +794,10 @@ export function elementStart(
  * @param overriddenRenderer Optional A renderer to override the default one
  * @returns the element created
  */
-export function elementCreate(name: string, overriddenRenderer?: Renderer3): RElement {
+export function elementCreate(name: string, overriddenRenderer?: Renderer2): RElement {
   let native: RElement;
   const rendererToUse = overriddenRenderer || renderer;
-
-  if (isProceduralRenderer(rendererToUse)) {
-    native = rendererToUse.createElement(name, _currentNamespace);
-  } else {
-    if (_currentNamespace === null) {
-      native = rendererToUse.createElement(name);
-    } else {
-      native = rendererToUse.createElementNS(_currentNamespace, name);
-    }
-  }
+  native = rendererToUse.createElement(name, _currentNamespace);
   return native;
 }
 
@@ -1051,7 +1043,6 @@ export function createTView(
 }
 
 function setUpAttributes(native: RElement, attrs: TAttributes): void {
-  const isProc = isProceduralRenderer(renderer);
   let i = 0;
 
   while (i < attrs.length) {
@@ -1066,18 +1057,12 @@ function setUpAttributes(native: RElement, attrs: TAttributes): void {
         const namespaceURI = attrs[i + 1] as string;
         const attrName = attrs[i + 2] as string;
         const attrVal = attrs[i + 3] as string;
-        isProc ?
-            (renderer as ProceduralRenderer3)
-                .setAttribute(native, attrName, attrVal, namespaceURI) :
-            native.setAttributeNS(namespaceURI, attrName, attrVal);
+        renderer.setAttribute(native, attrName, attrVal, namespaceURI);
         i += 4;
       } else {
         // Standard attributes
         const attrVal = attrs[i + 1];
-        isProc ?
-            (renderer as ProceduralRenderer3)
-                .setAttribute(native, attrName as string, attrVal as string) :
-            native.setAttribute(attrName as string, attrVal as string);
+        renderer.setAttribute(native, attrName as string, attrVal as string);
         i += 2;
       }
     }
@@ -1095,14 +1080,12 @@ export function createError(text: string, token: any) {
  * @param elementOrSelector Render element or CSS selector to locate the element.
  */
 export function locateHostElement(
-    factory: RendererFactory3, elementOrSelector: RElement | string): RElement|null {
+    factory: RendererFactory2, elementOrSelector: RElement | string): RElement|null {
   ngDevMode && assertDataInRange(-1);
   rendererFactory = factory;
   const defaultRenderer = factory.createRenderer(null, null);
   const rNode = typeof elementOrSelector === 'string' ?
-      (isProceduralRenderer(defaultRenderer) ?
-           defaultRenderer.selectRootElement(elementOrSelector) :
-           defaultRenderer.querySelector(elementOrSelector)) :
+      defaultRenderer.selectRootElement(elementOrSelector) :
       elementOrSelector;
   if (ngDevMode && !rNode) {
     if (typeof elementOrSelector === 'string') {
@@ -1162,20 +1145,9 @@ export function listener(
 
   // In order to match current behavior, native DOM event listeners must be added for all
   // events (including outputs).
-  if (isProceduralRenderer(renderer)) {
-    const wrappedListener = wrapListenerWithDirtyLogic(viewData, listenerFn);
-    const cleanupFn = renderer.listen(native, eventName, wrappedListener);
-    storeCleanupFn(viewData, cleanupFn);
-  } else {
-    const wrappedListener = wrapListenerWithDirtyAndDefault(viewData, listenerFn);
-    native.addEventListener(eventName, wrappedListener, useCapture);
-    const cleanupInstances = getCleanup(viewData);
-    cleanupInstances.push(wrappedListener);
-    if (firstTemplatePass) {
-      getTViewCleanup(viewData).push(
-          eventName, node.tNode.index, cleanupInstances !.length - 1, useCapture);
-    }
-  }
+  const wrappedListener = wrapListenerWithDirtyAndDefault(viewData, listenerFn);
+  const cleanupFn = renderer.listen(native, eventName, wrappedListener);
+  storeCleanupFn(viewData, cleanupFn);
 
   let tNode: TNode|null = node.tNode;
   if (tNode.outputs === undefined) {
@@ -1265,13 +1237,11 @@ export function elementAttribute(
     const element = loadElement(index);
     if (value == null) {
       ngDevMode && ngDevMode.rendererRemoveAttribute++;
-      isProceduralRenderer(renderer) ? renderer.removeAttribute(element.native, name) :
-                                       element.native.removeAttribute(name);
+      renderer.removeAttribute(element.native, name);
     } else {
       ngDevMode && ngDevMode.rendererSetAttribute++;
       const strValue = sanitizer == null ? stringify(value) : sanitizer(value);
-      isProceduralRenderer(renderer) ? renderer.setAttribute(element.native, name, strValue) :
-                                       element.native.setAttribute(name, strValue);
+      renderer.setAttribute(element.native, name, strValue);
     }
   }
 }
@@ -1313,9 +1283,7 @@ export function elementProperty<T>(
     value = sanitizer != null ? (sanitizer(value) as any) : value;
     const native = node.native;
     ngDevMode && ngDevMode.rendererSetProperty++;
-    isProceduralRenderer(renderer) ? renderer.setProperty(native, propName, value) :
-                                     (native.setProperty ? native.setProperty(propName, value) :
-                                                           (native as any)[propName] = value);
+    renderer.setProperty(native, propName, value);
   }
 }
 
@@ -1607,8 +1575,7 @@ export function textBinding<T>(index: number, value: T | NO_CHANGE): void {
     ngDevMode && assertDefined(existingNode, 'LNode should exist');
     ngDevMode && assertDefined(existingNode.native, 'native element should exist');
     ngDevMode && ngDevMode.rendererSetText++;
-    isProceduralRenderer(renderer) ? renderer.setValue(existingNode.native, stringify(value)) :
-                                     existingNode.native.textContent = stringify(value);
+    renderer.setValue(existingNode.native, stringify(value));
   }
 }
 
@@ -2249,18 +2216,6 @@ export function markDirtyIfOnPush(node: LElementNode): void {
   if (node.data && !(node.data[FLAGS] & LViewFlags.CheckAlways)) {
     node.data[FLAGS] |= LViewFlags.Dirty;
   }
-}
-
-/**
- * Wraps an event listener so its host view and its ancestor views will be marked dirty
- * whenever the event fires. Necessary to support OnPush components.
- */
-export function wrapListenerWithDirtyLogic(
-    view: LViewData, listenerFn: (e?: any) => any): (e: Event) => any {
-  return function(e: any) {
-    markViewDirty(view);
-    return listenerFn(e);
-  };
 }
 
 /**

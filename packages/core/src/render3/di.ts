@@ -10,6 +10,7 @@
 // correctly implementing its interfaces for backwards compatibility.
 
 import {ChangeDetectorRef as viewEngine_ChangeDetectorRef} from '../change_detection/change_detector_ref';
+import {Renderer2} from '../core';
 import {InjectionToken} from '../di/injection_token';
 import {InjectFlags, Injector, NullInjector, inject, setCurrentInjector} from '../di/injector';
 import {ComponentFactory as viewEngine_ComponentFactory, ComponentRef as viewEngine_ComponentRef} from '../linker/component_factory';
@@ -29,7 +30,6 @@ import {DirectiveDefInternal, RenderFlags} from './interfaces/definition';
 import {LInjector} from './interfaces/injector';
 import {AttributeMarker, LContainerNode, LElementContainerNode, LElementNode, LNode, LViewNode, TContainerNode, TElementNode, TNodeFlags, TNodeType} from './interfaces/node';
 import {LQueries, QueryReadType} from './interfaces/query';
-import {Renderer3} from './interfaces/renderer';
 import {DIRECTIVES, HOST_NODE, INJECTOR, LViewData, QUERIES, RENDERER, TVIEW, TView} from './interfaces/view';
 import {assertNodeOfPossibleTypes, assertNodeType} from './node_assert';
 import {addRemoveViewFromContainer, appendChild, detachView, getChildLNode, getParentLNode, insertView, removeView} from './node_manipulation';
@@ -799,7 +799,7 @@ export function getInheritedFactory<T>(type: Type<any>): (type: Type<T>) => T {
 class TemplateRef<T> implements viewEngine_TemplateRef<T> {
   constructor(
       private _declarationParentView: LViewData, readonly elementRef: viewEngine_ElementRef,
-      private _tView: TView, private _renderer: Renderer3, private _queries: LQueries|null) {}
+      private _tView: TView, private _renderer: Renderer2, private _queries: LQueries|null) {}
 
   createEmbeddedView(context: T, containerNode?: LContainerNode, index?: number):
       viewEngine_EmbeddedViewRef<T> {

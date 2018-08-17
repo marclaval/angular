@@ -15,87 +15,7 @@
  * it will be easy to implement such API.
  */
 
-import {RendererStyleFlags2, RendererType2} from '../../render/api';
-
-
-// TODO: cleanup once the code is merged in angular/angular
-export enum RendererStyleFlags3 {
-  Important = 1 << 0,
-  DashCase = 1 << 1
-}
-
-export type Renderer3 = ObjectOrientedRenderer3 | ProceduralRenderer3;
-
-/**
- * Object Oriented style of API needed to create elements and text nodes.
- *
- * This is the native browser API style, e.g. operations are methods on individual objects
- * like HTMLElement. With this style, no additional code is needed as a facade
- * (reducing payload size).
- * */
-export interface ObjectOrientedRenderer3 {
-  createComment(data: string): RComment;
-  createElement(tagName: string): RElement;
-  createElementNS(namespace: string, tagName: string): RElement;
-  createTextNode(data: string): RText;
-
-  querySelector(selectors: string): RElement|null;
-}
-
-/** Returns whether the `renderer` is a `ProceduralRenderer3` */
-export function isProceduralRenderer(renderer: ProceduralRenderer3 | ObjectOrientedRenderer3):
-    renderer is ProceduralRenderer3 {
-  return !!((renderer as any).listen);
-}
-
-/**
- * Procedural style of API needed to create elements and text nodes.
- *
- * In non-native browser environments (e.g. platforms such as web-workers), this is the
- * facade that enables element manipulation. This also facilitates backwards compatibility
- * with Renderer2.
- */
-export interface ProceduralRenderer3 {
-  destroy(): void;
-  createComment(value: string): RComment;
-  createElement(name: string, namespace?: string|null): RElement;
-  createText(value: string): RText;
-  /**
-   * This property is allowed to be null / undefined,
-   * in which case the view engine won't call it.
-   * This is used as a performance optimization for production mode.
-   */
-  destroyNode?: ((node: RNode) => void)|null;
-  appendChild(parent: RElement, newChild: RNode): void;
-  insertBefore(parent: RNode, newChild: RNode, refChild: RNode|null): void;
-  removeChild(parent: RElement, oldChild: RNode): void;
-  selectRootElement(selectorOrNode: string|any): RElement;
-
-  setAttribute(el: RElement, name: string, value: string, namespace?: string|null): void;
-  removeAttribute(el: RElement, name: string, namespace?: string|null): void;
-  addClass(el: RElement, name: string): void;
-  removeClass(el: RElement, name: string): void;
-  setStyle(
-      el: RElement, style: string, value: any,
-      flags?: RendererStyleFlags2|RendererStyleFlags3): void;
-  removeStyle(el: RElement, style: string, flags?: RendererStyleFlags2|RendererStyleFlags3): void;
-  setProperty(el: RElement, name: string, value: any): void;
-  setValue(node: RText, value: string): void;
-
-  // TODO(misko): Deprecate in favor of addEventListener/removeEventListener
-  listen(target: RNode, eventName: string, callback: (event: any) => boolean | void): () => void;
-}
-
-export interface RendererFactory3 {
-  createRenderer(hostElement: RElement|null, rendererType: RendererType2|null): Renderer3;
-  begin?(): void;
-  end?(): void;
-}
-
-export const domRendererFactory3: RendererFactory3 = {
-  createRenderer: (hostElement: RElement | null, rendererType: RendererType2 | null):
-                      Renderer3 => { return document;}
-};
+import {Renderer2, RendererFactory2, RendererStyleFlags2, RendererType2} from '../../render/api';
 
 /** Subset of API needed for appending elements and text nodes. */
 export interface RNode {
@@ -127,6 +47,7 @@ export interface RElement extends RNode {
   setAttribute(name: string, value: string): void;
   removeAttribute(name: string): void;
   setAttributeNS(namespaceURI: string, qualifiedName: string, value: string): void;
+  removeAttributeNS(namespace: string, name: string): void;
   addEventListener(type: string, listener: EventListener, useCapture?: boolean): void;
   removeEventListener(type: string, listener?: EventListener, options?: boolean): void;
 
@@ -150,3 +71,120 @@ export interface RComment extends RNode {}
 // Note: This hack is necessary so we don't erroneously get a circular dependency
 // failure based on types.
 export const unusedValueExportToPlacateAjd = 1;
+
+export const ivyDomRendererFactory: RendererFactory2 = {
+  createRenderer: (hostElement: any, type: RendererType2|null): Renderer2 => ivyDomRenderer,
+
+  begin: () => {},
+  end: () => {}
+}
+
+const NAMESPACE_URIS: {[ns: string]: string} = {
+  'svg': 'http://www.w3.org/2000/svg',
+  'xhtml': 'http://www.w3.org/1999/xhtml',
+  'xlink': 'http://www.w3.org/1999/xlink',
+  'xml': 'http://www.w3.org/XML/1998/namespace',
+  'xmlns': 'http://www.w3.org/2000/xmlns/',
+};
+
+export const ivyDomRenderer: Renderer2 = {
+  data: {},
+  destroyNode: null,
+
+  destroy: () => {},
+
+  createElement: (name: string, namespace?: string|null): RElement => {
+    if (namespace == null) {
+      return document.createElement(name);
+    } else {
+      return document.createElementNS(namespace, name) as any as RElement;
+    }
+  },
+
+  createComment: (value: string): RComment => document.createComment(value),
+
+  createText: (value: string): RText => document.createTextNode(value),
+
+  appendChild: (parent: RElement, newChild: RNode): void => { parent.appendChild(newChild); },
+
+  insertBefore: (parent: RElement, newChild: RNode, refChild: RNode): void => {
+    parent.insertBefore(newChild, refChild, true);
+  },
+
+  removeChild: (parent: RElement, oldChild: RNode): void => { parent.removeChild(oldChild); },
+
+  selectRootElement: (selectorOrNode: string|RNode): RNode|null => {
+    return typeof selectorOrNode === 'string' ? document.querySelector(selectorOrNode) :
+                                                selectorOrNode;
+  },
+
+  parentNode: (node: RNode): RNode|null => (node as any).parentNode,
+
+  nextSibling: (node: RNode): RNode|null => (node as any).nextSibling,
+
+  setAttribute: (el: RElement, name: string, value: string, namespace?: string): void => {
+    if (namespace) {
+      const namespaceUri = NAMESPACE_URIS[namespace];
+      if (namespaceUri) {
+        el.setAttributeNS(namespaceUri, `${namespace}:${name}`, value);
+      } else {
+        //Unknown namespace, in that case we assume that namespace is in fact an URI and that the attribute is already prefixed
+        el.setAttributeNS(namespace, name, value);
+      }
+    } else {
+      el.setAttribute(name, value);
+    }
+  },
+
+  removeAttribute: (el: RElement, name: string, namespace?: string): void => {
+    if (namespace) {
+      const namespaceUri = NAMESPACE_URIS[namespace];
+      if (namespaceUri) {
+        el.removeAttributeNS(namespaceUri, name);
+      } else {
+        el.removeAttribute(`${namespace}:${name}`);
+      }
+    } else {
+      el.removeAttribute(name);
+    }
+  },
+
+  addClass: (el: RElement, name: string) => { el.classList.add(name); },
+
+  removeClass: (el: RElement, name: string) => { el.classList.remove(name); },
+
+  setStyle: (el: RElement, style: string, value: any, flags: RendererStyleFlags2): void => {
+    if (flags & RendererStyleFlags2.DashCase) {
+      el.style.setProperty(
+          style, value, !!(flags & RendererStyleFlags2.Important) ? 'important' : '');
+    } else {
+      (el as any).style[style] = value;
+    }
+  },
+
+  removeStyle: (el: RElement, style: string, flags: RendererStyleFlags2): void => {
+    if (flags & RendererStyleFlags2.DashCase) {
+      el.style.removeProperty(style);
+    } else {
+      // IE requires '' instead of null
+      // see https://github.com/angular/angular/issues/7916
+      (el as any).style[style] = '';
+    }
+  },
+
+  setProperty: (el: RNode, name: string, value: any): void => { (el as any)[name] = value; },
+
+  setValue: (node: any, value: string): void => { node.nodeValue = value; },
+
+  listen: (
+      target: 'window'|'document'|'body'|RElement, eventName: string,
+      callback: (event: any) => boolean | void): () => void => {
+    if (typeof target !== 'string') {
+      target.addEventListener(eventName, callback, false);
+      return () => target.removeEventListener(eventName, callback, false);
+    } else {
+      throw new Error(
+          `Renderer2Adapter.listen doesn't support event target as a string, use an element instead.`);
+    }
+  }
+};

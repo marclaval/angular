@@ -6,6 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+import {RendererFactory2} from '@angular/core';
 import {stringifyElement} from '@angular/platform-browser/testing/src/browser_util';
 
 import {Injector} from '../../src/di/injector';
@@ -15,11 +16,9 @@ import {ComponentTemplate, ComponentType, DirectiveDefInternal, DirectiveType, P
 import {NG_HOST_SYMBOL, renderTemplate} from '../../src/render3/instructions';
 import {DirectiveDefList, DirectiveTypesOrFactory, PipeDefInternal, PipeDefList, PipeTypesOrFactory} from '../../src/render3/interfaces/definition';
 import {LElementNode} from '../../src/render3/interfaces/node';
-import {RElement, RText, Renderer3, RendererFactory3, domRendererFactory3} from '../../src/render3/interfaces/renderer';
+import {RElement, RText, ivyDomRendererFactory,} from '../../src/render3/interfaces/renderer';
 import {Sanitizer} from '../../src/sanitization/security';
 import {Type} from '../../src/type';
-
-import {getRendererFactory2} from './imported_renderer2';
 
 export abstract class BaseFixture {
   hostElement: HTMLElement;
@@ -49,7 +48,7 @@ export class TemplateFixture extends BaseFixture {
   private _directiveDefs: DirectiveDefList|null;
   private _pipeDefs: PipeDefList|null;
   private _sanitizer: Sanitizer|null;
-  private _rendererFactory: RendererFactory3;
+  private _rendererFactory: RendererFactory2;
 
   /**
    *
@@ -61,12 +60,12 @@ export class TemplateFixture extends BaseFixture {
   constructor(
       private createBlock: () => void, private updateBlock: () => void = noop,
       directives?: DirectiveTypesOrFactory|null, pipes?: PipeTypesOrFactory|null,
-      sanitizer?: Sanitizer|null, rendererFactory?: RendererFactory3) {
+      sanitizer?: Sanitizer|null, rendererFactory?: RendererFactory2) {
     super();
     this._directiveDefs = toDefs(directives, extractDirectiveDef);
     this._pipeDefs = toDefs(pipes, extractPipeDef);
     this._sanitizer = sanitizer || null;
-    this._rendererFactory = rendererFactory || domRendererFactory3;
+    this._rendererFactory = rendererFactory || testRendererFactory;
     this.hostNode = renderTemplate(this.hostElement, (rf: RenderFlags, ctx: any) => {
       if (rf & RenderFlags.Create) {
         this.createBlock();
@@ -99,7 +98,7 @@ export class ComponentFixture<T> extends BaseFixture {
 
   constructor(
       private componentType: ComponentType<T>,
-      opts: {injector?: Injector, sanitizer?: Sanitizer, rendererFactory?: RendererFactory3} = {}) {
+      opts: {injector?: Injector, sanitizer?: Sanitizer, rendererFactory?: RendererFactory2} = {}) {
     super();
     this.requestAnimationFrame = function(fn: () => void) {
       requestAnimationFrame.queue.push(fn);
@@ -116,7 +115,7 @@ export class ComponentFixture<T> extends BaseFixture {
       scheduler: this.requestAnimationFrame,
       injector: opts.injector,
       sanitizer: opts.sanitizer,
-      rendererFactory: opts.rendererFactory || domRendererFactory3
+      rendererFactory: opts.rendererFactory || testRendererFactory
     });
   }
 
@@ -134,12 +133,7 @@ export class ComponentFixture<T> extends BaseFixture {
 export const document = ((typeof global == 'object' && global || window) as any).document;
 export let containerEl: HTMLElement = null !;
 let host: LElementNode|null;
-const isRenderer2 =
-    typeof process == 'object' && process.argv[3] && process.argv[3] === '--r=renderer2';
-// tslint:disable-next-line:no-console
-console.log(`Running tests with ${!isRenderer2 ? 'document' : 'Renderer2'} renderer...`);
-const testRendererFactory: RendererFactory3 =
-    isRenderer2 ? getRendererFactory2(document) : domRendererFactory3;
+const testRendererFactory: RendererFactory2 = ivyDomRendererFactory;
 
 export const requestAnimationFrame:
     {(fn: () => void): void; flush(): void; queue: (() => void)[];} = function(fn: () => void) {
@@ -171,7 +165,7 @@ export function resetDOM() {
  */
 export function renderToHtml(
     template: ComponentTemplate<any>, ctx: any, directives?: DirectiveTypesOrFactory | null,
-    pipes?: PipeTypesOrFactory | null, providedRendererFactory?: RendererFactory3 | null) {
+    pipes?: PipeTypesOrFactory | null, providedRendererFactory?: RendererFactory2 | null) {
   host = renderTemplate(
       containerEl, template, ctx, providedRendererFactory || testRendererFactory, host,
       toDefs(directives, extractDirectiveDef), toDefs(pipes, extractPipeDef));
@@ -261,6 +255,5 @@ export function createDirective(
 
 
 // Verify that DOM is a type of render. This is here for error checking only and has no use.
-export const renderer: Renderer3 = null as any as Document;
 export const element: RElement = null as any as HTMLElement;
 export const text: RText = null as any as Text;

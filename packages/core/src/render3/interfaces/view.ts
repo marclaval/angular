@@ -6,6 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
+import {Renderer2} from '../../core';
 import {Injector} from '../../di/injector';
 import {QueryList} from '../../linker';
 import {Sanitizer} from '../../sanitization/security';
@@ -14,7 +15,6 @@ import {LContainer} from './container';
 import {ComponentQuery, ComponentTemplate, DirectiveDefInternal, DirectiveDefList, PipeDefInternal, PipeDefList} from './definition';
 import {LElementNode, LViewNode, TNode} from './node';
 import {LQueries} from './query';
-import {Renderer3} from './renderer';
 
 /** Size of LViewData's header. Necessary to adjust for it when setting slots.  */
 export const HEADER_OFFSET = 17;
@@ -146,7 +146,7 @@ export interface LViewData extends Array<any> {
   [INJECTOR]: Injector|null;
 
   /** Renderer to be used for this view. */
-  [RENDERER]: Renderer3;
+  [RENDERER]: Renderer2;
 
   /** An optional custom sanitizer. */
   [SANITIZER]: Sanitizer|null;

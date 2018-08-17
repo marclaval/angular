@@ -21,7 +21,7 @@ import {LifecycleHooksFeature, createRootContext} from './component';
 import {baseDirectiveCreate, createLNode, createLViewData, createTView, elementCreate, enterView, hostElement, initChangeDetectorIfExisting, locateHostElement, renderEmbeddedTemplate} from './instructions';
 import {ComponentDefInternal, ComponentType, RenderFlags} from './interfaces/definition';
 import {LElementNode, TNode, TNodeType} from './interfaces/node';
-import {RElement, RendererFactory3, domRendererFactory3} from './interfaces/renderer';
+import {RElement, ivyDomRendererFactory} from './interfaces/renderer';
 import {CONTEXT, FLAGS, INJECTOR, LViewData, LViewFlags, RootContext, TVIEW} from './interfaces/view';
 import {RootViewRef, ViewRef} from './view_ref';
 
@@ -98,13 +98,13 @@ export class ComponentFactory<T> extends viewEngine_ComponentFactory<T> {
       ngModule?: viewEngine_NgModuleRef<any>|undefined): viewEngine_ComponentRef<T> {
     const isInternalRootView = rootSelectorOrNode === undefined;
 
-    let rendererFactory: RendererFactory3;
+    let rendererFactory: RendererFactory2;
 
     if (ngModule) {
       const wrapper = ngModule.injector.get(WRAP_RENDERER_FACTORY2, (v: RendererFactory2) => v);
-      rendererFactory = wrapper(ngModule.injector.get(RendererFactory2)) as RendererFactory3;
+      rendererFactory = wrapper(ngModule.injector.get(RendererFactory2)) as RendererFactory2;
     } else {
-      rendererFactory = domRendererFactory3;
+      rendererFactory = ivyDomRendererFactory;
     }
 
     const hostNode = isInternalRootView ?
