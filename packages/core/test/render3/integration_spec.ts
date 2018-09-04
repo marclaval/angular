@@ -16,7 +16,7 @@ import {AttributeMarker, defineComponent, defineDirective, injectElementRef, inj
 import {NO_CHANGE, bind, container, containerRefreshEnd, containerRefreshStart, element, elementAttribute, elementClassProp, elementContainerEnd, elementContainerStart, elementEnd, elementProperty, elementStart, elementStyleProp, elementStyling, elementStylingApply, embeddedViewEnd, embeddedViewStart, interpolation1, interpolation2, interpolation3, interpolation4, interpolation5, interpolation6, interpolation7, interpolation8, interpolationV, listener, load, loadDirective, projection, projectionDef, text, textBinding, template} from '../../src/render3/instructions';
 import {InitialStylingFlags} from '../../src/render3/interfaces/definition';
 import {RElement, Renderer3, RendererFactory3, domRendererFactory3, RText, RComment, RNode, RendererStyleFlags3, ProceduralRenderer3} from '../../src/render3/interfaces/renderer';
-import {HEADER_OFFSET, CONTEXT, DIRECTIVES} from '../../src/render3/interfaces/view';
+import {HEADER_OFFSET, CONTEXT, INJECTABLES} from '../../src/render3/interfaces/view';
 import {sanitizeUrl} from '../../src/sanitization/sanitization';
 import {Sanitizer, SecurityContext} from '../../src/sanitization/security';
 
@@ -2008,7 +2008,7 @@ describe('render3 integration test', () => {
          const context = getContext(hostElm) !;
          const elementNode = context.lViewData[context.lNodeIndex];
          const elmData = elementNode.data !;
-         const dirs = elmData[DIRECTIVES];
+         const dirs = elmData[INJECTABLES];
 
          expect(dirs).toContain(myDir1Instance);
          expect(dirs).toContain(myDir2Instance);

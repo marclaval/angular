@@ -10,6 +10,7 @@ import {LifecycleHooksFeature, getHostElement, getRenderedText, renderComponent,
 import {defineBase, defineComponent, defineDirective, defineNgModule, definePipe} from './definition';
 import {InheritDefinitionFeature} from './features/inherit_definition_feature';
 import {NgOnChangesFeature} from './features/ng_onchanges_feature';
+import {ProvidesFeature} from './features/provides_feature';
 import {PublicFeature} from './features/public_feature';
 import {BaseDef, ComponentDef, ComponentDefInternal, ComponentTemplate, ComponentType, DirectiveDef, DirectiveDefFlags, DirectiveDefInternal, DirectiveType, PipeDef} from './interfaces/definition';
 
@@ -153,6 +154,7 @@ export {
   DirectiveType,
   NgOnChangesFeature,
   InheritDefinitionFeature,
+  ProvidesFeature,
   PublicFeature,
   PipeDef,
   LifecycleHooksFeature,

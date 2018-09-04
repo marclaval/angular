@@ -47,8 +47,29 @@ export const enum TNodeFlags {
 
   /** The index of the first directive on this node is encoded on the most significant bits  */
   DirectiveStartingIndexShift = 15,
+
+  /** This is used to increment the index of the first directive on this node */
+  DirectiveIndexShifter = 0b00000000000000001000000000000000,
+
 }
 
+/**
+ * Corresponds to the TNode.providerFlags property.
+ */
+export const enum TNodeProviderIndexes {
+  /** The index of the first provider on this node is encoded on the least significant bits */
+  ProvidersStartIndexMask = 0b00000000000000001111111111111111,
+
+  /** The count of view providers from the component on this node is encoded on the next 8 bits */
+  CptViewProvidersCountMask = 0b00000000111111110000000000000000,
+  CptViewProvidersCountShift = 16,
+  CptViewProvidersCountShifter = 0b00000000000000010000000000000000,
+
+  /** The count of providers from the component on this node is encoded on the 8 most significant
+     bits */
+  CptProvidersCountShift = 24,
+  CptProvidersCountShifter = 0b00000001000000000000000000000000,
+}
 /**
  * LNode is an internal data structure which is used for the incremental DOM algorithm.
  * The "L" stands for "Logical" to differentiate between `RNodes` (actual rendered DOM
@@ -220,6 +241,14 @@ export interface TNode {
    * with a node without searching the whole directives array.
    */
   flags: TNodeFlags;
+
+  /**
+   * This number stores two values using its bits:
+   *
+   * - the index of the first provider on that node (first 16 bits)
+   * - the index of the first viewProvider on that node (last 16 bits)
+   */
+  providerIndexes: TNodeProviderIndexes;
 
   /** The tag name associated with this node. */
   tagName: string|null;

@@ -9,7 +9,7 @@
 import {assertEqual} from './assert';
 import {DirectiveDefInternal} from './interfaces/definition';
 import {TNodeFlags} from './interfaces/node';
-import {DIRECTIVES, FLAGS, HookData, LViewData, LViewFlags, TView} from './interfaces/view';
+import {FLAGS, HookData, INJECTABLES, LViewData, LViewFlags, TView} from './interfaces/view';
 
 
 /**
@@ -52,7 +52,7 @@ export function queueLifecycleHooks(flags: number, tView: TView): void {
     // directiveCreate) so we can preserve the current hook order. Content, view, and destroy
     // hooks for projected components and directives must be called *before* their hosts.
     for (let i = start; i < end; i++) {
-      const def: DirectiveDefInternal<any> = tView.directives ![i];
+      const def: DirectiveDefInternal<any> = tView.injectables ![i] as DirectiveDefInternal<any>;
       queueContentHooks(def, tView, i);
       queueViewHooks(def, tView, i);
       queueDestroyHooks(def, tView, i);
@@ -99,7 +99,7 @@ function queueDestroyHooks(def: DirectiveDefInternal<any>, tView: TView, i: numb
 export function executeInitHooks(
     currentView: LViewData, tView: TView, creationMode: boolean): void {
   if (currentView[FLAGS] & LViewFlags.RunInit) {
-    executeHooks(currentView[DIRECTIVES] !, tView.initHooks, tView.checkHooks, creationMode);
+    executeHooks(currentView[INJECTABLES] !, tView.initHooks, tView.checkHooks, creationMode);
     currentView[FLAGS] &= ~LViewFlags.RunInit;
   }
 }

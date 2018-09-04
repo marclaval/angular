@@ -11,8 +11,11 @@
 
 import {ChangeDetectorRef as viewEngine_ChangeDetectorRef} from '../change_detection/change_detector_ref';
 import {getInjectableDef, getInjectorDef} from '../di/defs';
+import {resolveForwardRef} from '../di/forward_ref';
 import {InjectionToken} from '../di/injection_token';
-import {InjectFlags, Injector, NullInjector, inject, setCurrentInjector} from '../di/injector';
+import {InjectFlags, Injector, NullInjector, injectFromRoot, setInjectImplementation} from '../di/injector';
+import {Provider} from '../di/provider';
+import {isTypeProvider, providerToFactory} from '../di/r3_injector';
 import {ComponentFactory as viewEngine_ComponentFactory, ComponentRef as viewEngine_ComponentRef} from '../linker/component_factory';
 import {ComponentFactoryResolver as viewEngine_ComponentFactoryResolver} from '../linker/component_factory_resolver';
 import {ElementRef as viewEngine_ElementRef} from '../linker/element_ref';
@@ -22,18 +25,19 @@ import {ViewContainerRef as viewEngine_ViewContainerRef} from '../linker/view_co
 import {EmbeddedViewRef as viewEngine_EmbeddedViewRef, ViewRef as viewEngine_ViewRef} from '../linker/view_ref';
 import {Renderer2} from '../render';
 import {Type} from '../type';
+import {stringify} from '../util';
 
 import {assertDefined, assertGreaterThan, assertLessThan} from './assert';
 import {ComponentFactoryResolver} from './component_ref';
 import {getComponentDef, getDirectiveDef, getPipeDef} from './definition';
-import {addToViewTree, assertPreviousIsParent, createEmbeddedViewNode, createLContainer, createLNodeObject, createTNode, getPreviousOrParentNode, getPreviousOrParentTNode, getRenderer, isComponent, renderEmbeddedTemplate, resolveDirective} from './instructions';
+import {_getViewData, addToViewTree, assertPreviousIsParent, createEmbeddedViewNode, createLContainer, createLNodeObject, createTNode, getPreviousOrParentNode, getPreviousOrParentTNode, getRenderer, isComponent, renderEmbeddedTemplate, resolveDirective} from './instructions';
 import {VIEWS} from './interfaces/container';
-import {DirectiveDefInternal, RenderFlags} from './interfaces/definition';
+import {ComponentDefInternal, DirectiveDefInternal, RenderFlags} from './interfaces/definition';
 import {LInjector} from './interfaces/injector';
-import {AttributeMarker, LContainerNode, LElementContainerNode, LElementNode, LNode, LNodeWithLocalRefs, LViewNode, TContainerNode, TElementNode, TNodeFlags, TNodeType} from './interfaces/node';
+import {AttributeMarker, LContainerNode, LElementContainerNode, LElementNode, LNode, LNodeWithLocalRefs, LViewNode, TContainerNode, TElementNode, TNodeFlags, TNodeProviderIndexes, TNodeType} from './interfaces/node';
 import {LQueries, QueryReadType} from './interfaces/query';
 import {Renderer3, isProceduralRenderer} from './interfaces/renderer';
-import {DIRECTIVES, HOST_NODE, INJECTOR, LViewData, QUERIES, RENDERER, TVIEW, TView} from './interfaces/view';
+import {HOST_NODE, INJECTABLES, INJECTOR, LViewData, QUERIES, RENDERER, TVIEW, TView} from './interfaces/view';
 import {assertNodeOfPossibleTypes, assertNodeType} from './node_assert';
 import {addRemoveViewFromContainer, appendChild, detachView, getChildLNode, getParentLNode, insertView, removeView} from './node_manipulation';
 import {ViewRef} from './view_ref';
@@ -65,7 +69,7 @@ let nextNgElementId = 0;
  * @param injector The node injector in which the directive should be registered
  * @param type The directive to register
  */
-export function bloomAdd(injector: LInjector, type: Type<any>): void {
+export function bloomAdd(injector: LInjector, type: Type<any>| InjectionToken<any>): void {
   let id: number|undefined = (type as any)[NG_ELEMENT_ID];
 
   // Set a unique ID on the directive type, so if something tries to inject the directive,
@@ -146,22 +150,126 @@ export function getOrCreateNodeInjectorForNode(
 
 
 /**
- * Makes a directive public to the DI system by adding it to an injector's bloom filter.
+ * Makes a type or an injection token public to the DI system by adding it to an
+ * injector's bloom filter.
  *
  * @param di The node injector in which a directive will be added
- * @param def The definition of the directive to be made public
+ * @param def The type, injection token, or definition of the directive to be made public
  */
-export function diPublicInInjector(di: LInjector, def: DirectiveDefInternal<any>): void {
-  bloomAdd(di, def.type);
+function diPublicInInjector(di: LInjector, def: InjectionToken<any>| Type<any>): void {
+  bloomAdd(di, def);
 }
 
 /**
- * Makes a directive public to the DI system by adding it to an injector's bloom filter.
+ * Makes a directive, a type or an injection token public to the DI system by adding it to an
+ * injector's bloom filter.
  *
- * @param def The definition of the directive to be made public
+ * @param def The type, injection token, or definition of the directive to be made public
  */
 export function diPublic(def: DirectiveDefInternal<any>): void {
-  diPublicInInjector(getOrCreateNodeInjector(), def);
+  diPublicInInjector(getOrCreateNodeInjector(), def.type);
+}
+
+/**
+ * Resolves the providers which are defined in the DirectiveDef.
+ * 
+ * When inserting the tokens and the records in their respective arrays, we can assume that
+ * this method is called first for the component (if any), and then for other directives on the same node.
+ * So viewProviders are always resolved first, before all other providers.
+ * 
+ * @param def the directive definition
+ * @return the updated list of injectables
+ */
+let numberOfMultiProviders = 0;
+export function providersResolver<T>(
+    def: DirectiveDefInternal<T>, providers: Provider[], viewProviders: Provider[],
+    isLast: boolean) {
+  setInjectImplementation(directiveInject);
+
+  const previousOrParentNode = getPreviousOrParentNode();
+  const viewData = _getViewData();
+  const tView = viewData[TVIEW];
+  let injectables = viewData[INJECTABLES];
+
+  if (providers.length > 0 || viewProviders.length > 0) {
+    if (injectables == null) viewData[INJECTABLES] = injectables = [];
+    if (tView.injectables == null) tView.injectables = [];
+
+    for (let i = viewProviders.length - 1; i >= 0; i--) {
+      if (resolveProvider(viewProviders[i], tView, injectables)) {
+        // Shift starting index of directives
+        previousOrParentNode.tNode.flags += TNodeFlags.DirectiveIndexShifter;
+        previousOrParentNode.tNode.providerIndexes +=
+            TNodeProviderIndexes.CptViewProvidersCountShifter;
+      }
+    }
+
+    for (let i = providers.length - 1; i >= 0; i--) {
+      if (resolveProvider(providers[i], tView, injectables)) {
+        // Shift starting index of directives
+        previousOrParentNode.tNode.flags += TNodeFlags.DirectiveIndexShifter;
+        if ((def as ComponentDefInternal<T>).template) {
+          previousOrParentNode.tNode.providerIndexes +=
+              TNodeProviderIndexes.CptProvidersCountShifter;
+        }
+      }
+    }
+  }
+
+  if (isLast) numberOfMultiProviders = 0;
+}
+
+/**
+ * Resolves a provider and publishes it to the DI system.
+ * 
+ * @return true if a factory was created
+ */
+function resolveProvider(_provider: Provider, tView: TView, injectables: any[]): boolean {
+  const provider = resolveForwardRef(_provider);
+  let token: any = isTypeProvider(provider) ? provider : resolveForwardRef(provider.provide);
+  const factory = providerToFactory(provider);
+  if (provider.multi) {
+    const index = getPreviousOrParentNode().tNode.providerIndexes &
+        TNodeProviderIndexes.ProvidersStartIndexMask;
+    let existingFactoryIndex = -1;
+    for (let i = 0; i < numberOfMultiProviders && existingFactoryIndex == -1; i++) {
+      if (tView.injectables ![index + i] === token) existingFactoryIndex = index + i;
+    }
+    if (existingFactoryIndex == -1) {
+      // Let's create a special factory for that token
+      const multiFactory = createFactory(() => {}, [factory]);
+      multiFactory.factory = () => multiFactory.multi !.map(fn => fn()).reverse();
+      tView.injectables !.splice(index, 0, token);
+      injectables !.splice(index, 0, multiFactory);
+      diPublicInInjector(getOrCreateNodeInjector(), token);
+      numberOfMultiProviders++;
+      return true;
+    } else {
+      // Let's update the existing special factory
+      injectables ![existingFactoryIndex].multi.push(factory);
+      return false;
+    }
+  } else {
+    tView.injectables !.push(token);
+    injectables.push(createFactory(factory));
+    diPublicInInjector(getOrCreateNodeInjector(), token);
+    return true;
+  }
+}
+
+class Factory {
+  /// Marker set to true during factory invocation to see if we get into recursive loop.
+  /// Recursive loop causes an error to be displayed.
+  resolving = false;
+  constructor(public factory: () => any, public multi: (() => any)[]|undefined) {}
+}
+function createFactory(fn: () => any, multi?: (() => any)[]) {
+  return new Factory(fn, multi);
+}
+const FactoryPrototype = Factory.prototype;
+function isFactory(obj: any): obj is Factory {
+  // See: https://jsperf.com/instanceof-vs-getprototypeof
+  return typeof obj == 'object' && Object.getPrototypeOf(obj) == FactoryPrototype;
 }
 
 /**
@@ -323,7 +431,7 @@ function getOrCreateHostChangeDetector(currentNode: LViewNode | LElementNode):
       new ViewRef(
           hostNode.data as LViewData,
           hostNode
-              .view[DIRECTIVES] ![hostNode.tNode.flags >> TNodeFlags.DirectiveStartingIndexShift]);
+              .view[INJECTABLES] ![hostNode.tNode.flags >> TNodeFlags.DirectiveStartingIndexShift]);
 }
 
 
@@ -350,6 +458,18 @@ function getClosestComponentAncestor(node: LViewNode | LElementNode): LElementNo
 }
 
 /**
+ * Same as getClosestComponentAncestor(), but with the extra condition that the ancestor returned
+ * must have a node injector.
+ */
+function getClosestComponentAncestorWithInjector(node: LNode): LElementNode {
+  let hostNode = node.view[HOST_NODE];
+  while (hostNode && (hostNode.tNode.type === TNodeType.View || !hostNode.nodeInjector)) {
+    hostNode = hostNode.view[HOST_NODE];
+  }
+  return hostNode as LElementNode;
+}
+
+/**
  * Returns the value associated to the given token from the injectors.
  *
  * Look for the injector providing the token by walking up the node injector tree and then
@@ -360,20 +480,23 @@ function getClosestComponentAncestor(node: LViewNode | LElementNode): LElementNo
  * @param flags Injection flags
  * @returns the value from the injector or `null` when not found
  */
+let closestComponentAncestor: LElementNode|null;
 export function getOrCreateInjectable<T>(
     nodeInjector: LInjector, token: Type<T>| InjectionToken<T>,
     flags: InjectFlags = InjectFlags.Default): T|null {
   const bloomHash = bloomHashBit(token);
-
   // If the token has a bloom hash, then it is a directive that is public to the injection system
   // (diPublic) otherwise fall back to the module injector.
   if (bloomHash !== null) {
     let injector: LInjector|null = nodeInjector;
+    closestComponentAncestor = injector.node.tNode.flags & TNodeFlags.isComponent ?
+        injector.node as LElementNode :
+        getClosestComponentAncestorWithInjector(injector.node);
 
     while (injector) {
       // Get the closest potential matching injector (upwards in the injector tree) that
       // *potentially* has the token.
-      injector = bloomFindPossibleInjector(injector, bloomHash, flags);
+      injector = bloomFindPossibleInjector(injector !, bloomHash, flags);
 
       // If no injector is found, we *know* that there is no ancestor injector that contains the
       // token, so we abort.
@@ -382,22 +505,69 @@ export function getOrCreateInjectable<T>(
       }
 
       // At this point, we have an injector which *may* contain the token, so we step through the
-      // directives associated with the injector's corresponding node to get the directive instance.
+      // providers and directives associated with the injector's corresponding node to get the
+      // instance.
       const node = injector.node;
       const nodeFlags = node.tNode.flags;
+      const nodeProviderIndexes = node.tNode.providerIndexes;
+      const defs = node.view[TVIEW].injectables !;
+      // First, we step through providers
+      let canAccessViewProviders = false;
+      // We need to determine if view providers can be accessed by the starting node (i.e.
+      // nodeInjector.node).
+      // In other word, we need to know if nodeInjector.node belongs to the view of the current
+      // injector.node.
+      // In this while loop, we climb the node injector tree up.
+      // On top, we use getClosestComponentAncestorWithInjector()
+      // to climb the node tree, staying on the view side by jumping from root nodes to root nodes.
+      // When the 2 climbs intersect, it means that view providers apply.
+      if (node === closestComponentAncestor || closestComponentAncestor == null) {
+        canAccessViewProviders = true;
+        const nextHost = injector.node.view[HOST_NODE];
+        closestComponentAncestor =
+            nextHost ? getClosestComponentAncestorWithInjector(nextHost) : null;
+      }
+
+      const startInjectables = nodeProviderIndexes & TNodeProviderIndexes.ProvidersStartIndexMask;
+      const startDirectives = nodeFlags >> TNodeFlags.DirectiveStartingIndexShift;
+      const cptProvidersCount = nodeProviderIndexes >> TNodeProviderIndexes.CptProvidersCountShift;
+      const cptViewProvidersCount =
+          (nodeProviderIndexes & TNodeProviderIndexes.CptViewProvidersCountMask) >>
+          TNodeProviderIndexes.CptViewProvidersCountShift;
+      let multiResults: T[]|null = null;
+      const injectables = node.view[INJECTABLES] !;
+      for (let i = startInjectables; i < startDirectives; i++) {
+        const isViewProvider = i >= (startDirectives - cptProvidersCount - cptViewProvidersCount) &&
+            i < (startDirectives - cptProvidersCount);
+        const providerToken = defs[i] as InjectionToken<any>| Type<any>;
+        if (token === providerToken &&
+            (!isViewProvider || isViewProvider && canAccessViewProviders)) {
+          let value = injectables[i];
+          if (isFactory(value)) {
+            if (value.resolving) {
+              throw new Error(`Circular dep for ${stringify(token)}`);
+            }
+            value.resolving = true;
+            value = injectables[i] = value.factory();
+          }
+          closestComponentAncestor = null;
+          return value;
+        }
+      }
+      closestComponentAncestor = null;
+      // The list must be reversed here as the providers were inserted in a reverted order in the
+      // injectables arrays.
+      if (multiResults) return multiResults !.reverse() as any as T;
+
+      // Then, we step through directives
       const count = nodeFlags & TNodeFlags.DirectiveCountMask;
-
       if (count !== 0) {
-        const start = nodeFlags >> TNodeFlags.DirectiveStartingIndexShift;
-        const end = start + count;
-        const defs = node.view[TVIEW].directives !;
-
-        for (let i = start; i < end; i++) {
+        for (let i = startDirectives; i < startDirectives + count; i++) {
           // Get the definition for the directive at this index and, if it is injectable (diPublic),
           // and matches the given token, return the directive instance.
           const directiveDef = defs[i] as DirectiveDefInternal<any>;
           if (directiveDef.type === token && directiveDef.diPublic) {
-            return node.view[DIRECTIVES] ![i];
+            return node.view[INJECTABLES] ![i];
           }
         }
       }
@@ -420,12 +590,12 @@ export function getOrCreateInjectable<T>(
     }
   }
 
+
   const moduleInjector = getPreviousOrParentNode().view[INJECTOR];
-  const formerInjector = setCurrentInjector(moduleInjector);
-  try {
-    return inject(token, flags);
-  } finally {
-    setCurrentInjector(formerInjector);
+  if (moduleInjector) {
+    return moduleInjector.get(token, flags);
+  } else {
+    return injectFromRoot(token, flags);
   }
 }
 
@@ -526,6 +696,9 @@ export function bloomFindPossibleInjector(
     // If the ancestor bloom filter value has the bit corresponding to the directive, traverse up to
     // find the specific injector. If the ancestor bloom filter does not have the bit, we can abort.
     if (value & mask) {
+      if (injector.node === closestComponentAncestor) {
+        closestComponentAncestor = getClosestComponentAncestorWithInjector(injector.node);
+      }
       injector = injector.parent;
     } else {
       return null;
@@ -578,7 +751,7 @@ export const QUERY_READ_FROM_NODE =
           assertNodeOfPossibleTypes(
               node.tNode, TNodeType.Container, TNodeType.Element, TNodeType.ElementContainer);
       if (directiveIdx > -1) {
-        return node.view[DIRECTIVES] ![directiveIdx];
+        return node.view[INJECTABLES] ![directiveIdx];
       }
       if (node.tNode.type === TNodeType.Element || node.tNode.type === TNodeType.ElementContainer) {
         return getOrCreateElementRef(injector);

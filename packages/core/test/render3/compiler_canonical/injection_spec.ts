@@ -8,6 +8,7 @@
 
 import {Attribute, ChangeDetectionStrategy, ChangeDetectorRef, Component, ContentChild, ContentChildren, Directive, HostBinding, HostListener, INJECTOR, Inject, InjectFlags, Injectable, Injector, Input, NgModule, OnDestroy, Optional, Pipe, PipeTransform, QueryList, SimpleChanges, SkipSelf, TemplateRef, ViewChild, ViewChildren, ViewContainerRef, defineInjectable, defineInjector, inject} from '../../../src/core';
 import * as $r3$ from '../../../src/core_render3_private_export';
+import {ProvidesFeature} from '../../../src/render3/features/provides_feature';
 import {renderComponent, toHtml} from '../render_util';
 
 
@@ -160,8 +161,7 @@ describe('injection', () => {
           consts: 0,
           vars: 0,
           template: function MyApp_Template(rf: $RenderFlags$, ctx: $MyApp$) {},
-          providers: [ServiceA],
-          viewProviders: [ServiceB],
+          features: [ProvidesFeature([ServiceA], [ServiceB])]
         });
       }
       const e0_attrs = ['title', 'WORKS'];

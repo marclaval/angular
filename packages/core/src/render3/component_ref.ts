@@ -19,7 +19,7 @@ import {Type} from '../type';
 import {assertComponentType, assertDefined} from './assert';
 import {LifecycleHooksFeature, createRootContext} from './component';
 import {getComponentDef} from './definition';
-import {adjustBlueprintForNewNode, baseDirectiveCreate, createLNode, createLViewData, createTView, elementCreate, enterView, hostElement, initChangeDetectorIfExisting, locateHostElement, queueHostBindingForCheck, renderEmbeddedTemplate, setHostBindings} from './instructions';
+import {adjustBlueprintForNewNode, baseDirectiveCreate, createLNode, createLViewData, createTView, elementCreate, enterView, hostElement, initChangeDetectorIfExisting, locateHostElement, queueHostBindingForCheck, renderEmbeddedTemplate, resolveProvidersAndInstantiateDirective, setHostBindings} from './instructions';
 import {ComponentDefInternal, ComponentType, RenderFlags} from './interfaces/definition';
 import {LElementNode, TNode, TNodeType} from './interfaces/node';
 import {RElement, RendererFactory3, domRendererFactory3} from './interfaces/renderer';
@@ -138,8 +138,8 @@ export class ComponentFactory<T> extends viewEngine_ComponentFactory<T> {
       elementNode = hostElement(componentTag, hostNode, this.componentDef);
 
       // Create directive instance with factory() and store at index 0 in directives array
-      component =
-          baseDirectiveCreate(0, this.componentDef.factory(), this.componentDef, elementNode);
+      const instance = resolveProvidersAndInstantiateDirective(0, this.componentDef);
+      component = baseDirectiveCreate(instance, this.componentDef, elementNode);
       if (this.componentDef.hostBindings) {
         queueHostBindingForCheck(0, this.componentDef.hostVars);
       }

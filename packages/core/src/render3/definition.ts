@@ -238,17 +238,6 @@ export function defineComponent<T>(componentDefinition: {
   changeDetection?: ChangeDetectionStrategy;
 
   /**
-   * Defines the set of injectable objects that are visible to a Directive and its light DOM
-   * children.
-   */
-  providers?: Provider[];
-
-  /**
-   * Defines the set of injectable objects that are visible to its view DOM children.
-   */
-  viewProviders?: Provider[];
-
-  /**
    * Registry of directives and components that may be found in this component's view.
    *
    * The property is either an array of `DirectiveDef`s or a function which returns the array of
@@ -283,6 +272,7 @@ export function defineComponent<T>(componentDefinition: {
   const def: ComponentDefInternal<any> = {
     type: type,
     diPublic: null,
+    providersResolver: null,
     consts: componentDefinition.consts,
     vars: componentDefinition.vars,
     hostVars: componentDefinition.hostVars || 0,
@@ -318,8 +308,6 @@ export function defineComponent<T>(componentDefinition: {
     // TODO(misko): convert ViewEncapsulation into const enum so that it can be used directly in the
     // next line. Also `None` should be 0 not 2.
     encapsulation,
-    providers: EMPTY_ARRAY,
-    viewProviders: EMPTY_ARRAY,
     id: `c${_renderCompCount++}`, styles,
   };
   const feature = componentDefinition.features;
@@ -627,6 +615,12 @@ export const defineDirective = defineComponent as any as<T>(directiveDefinition:
    * See: {@link Directive.exportAs}
    */
   exportAs?: string;
+
+  /**
+   * Defines the set of injectable objects that are visible to a Directive and its light DOM
+   * children.
+   */
+  providers?: Provider[];
 }) => never;
 
 /**

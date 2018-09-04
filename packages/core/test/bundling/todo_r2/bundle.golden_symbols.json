@@ -192,9 +192,6 @@
     "name": "DIGIT_CHAR"
   },
   {
-    "name": "DIRECTIVES"
-  },
-  {
     "name": "DOCUMENT"
   },
   {
@@ -306,6 +303,9 @@
     "name": "FLAGS"
   },
   {
+    "name": "FactoryPrototype"
+  },
+  {
     "name": "FormStyle"
   },
   {
@@ -346,6 +346,9 @@
   },
   {
     "name": "IDENT"
+  },
+  {
+    "name": "INJECTABLES"
   },
   {
     "name": "INJECTOR"
@@ -1095,6 +1098,9 @@
     "name": "_global"
   },
   {
+    "name": "_injectImplementation"
+  },
+  {
     "name": "_iterableDiffersFactory"
   },
   {
@@ -1566,6 +1572,9 @@
     "name": "getClosestComponentAncestor"
   },
   {
+    "name": "getClosestComponentAncestorWithInjector"
+  },
+  {
     "name": "getClosureSafeProperty"
   },
   {
@@ -1836,6 +1845,9 @@
     "name": "initDomAdapter"
   },
   {
+    "name": "initNodeFlags"
+  },
+  {
     "name": "inject"
   },
   {
@@ -1851,6 +1863,12 @@
     "name": "injectElementRef"
   },
   {
+    "name": "injectFromRoot"
+  },
+  {
+    "name": "injectInjectorOnly"
+  },
+  {
     "name": "injectRenderer2"
   },
   {
@@ -1860,7 +1878,7 @@
     "name": "injectViewContainerRef"
   },
   {
-    "name": "injectableDefRecord"
+    "name": "injectableDefFactory"
   },
   {
     "name": "insertView"
@@ -1921,6 +1939,9 @@
   },
   {
     "name": "isExistingProvider"
+  },
+  {
+    "name": "isFactory"
   },
   {
     "name": "isFactoryProvider"
@@ -2145,6 +2166,9 @@
     "name": "promise"
   },
   {
+    "name": "providerToFactory"
+  },
+  {
     "name": "providerToRecord"
   },
   {
@@ -2227,6 +2251,9 @@
   },
   {
     "name": "resolveProvider"
+  },
+  {
+    "name": "resolveProvidersAndInstantiateDirective"
   },
   {
     "name": "resolveToken"

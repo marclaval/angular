@@ -19,11 +19,11 @@ import {executeHooks, executeInitHooks, queueInitHooks, queueLifecycleHooks} fro
 import {ACTIVE_INDEX, LContainer, RENDER_PARENT, VIEWS} from './interfaces/container';
 import {ComponentDefInternal, ComponentQuery, ComponentTemplate, DirectiveDefInternal, DirectiveDefListOrFactory, InitialStylingFlags, PipeDefListOrFactory, RenderFlags} from './interfaces/definition';
 import {LInjector} from './interfaces/injector';
-import {AttributeMarker, InitialInputData, InitialInputs, LContainerNode, LElementContainerNode, LElementNode, LNode, LNodeWithLocalRefs, LProjectionNode, LTextNode, LViewNode, LocalRefExtractor, PropertyAliasValue, PropertyAliases, TAttributes, TContainerNode, TElementNode, TNode, TNodeFlags, TNodeType, TViewNode} from './interfaces/node';
+import {AttributeMarker, InitialInputData, InitialInputs, LContainerNode, LElementContainerNode, LElementNode, LNode, LNodeWithLocalRefs, LProjectionNode, LTextNode, LViewNode, LocalRefExtractor, PropertyAliasValue, PropertyAliases, TAttributes, TContainerNode, TElementNode, TNode, TNodeFlags, TNodeProviderIndexes, TNodeType, TViewNode} from './interfaces/node';
 import {CssSelectorList, NG_PROJECT_AS_ATTR_NAME} from './interfaces/projection';
 import {LQueries} from './interfaces/query';
 import {ProceduralRenderer3, RComment, RElement, RNode, RText, Renderer3, RendererFactory3, RendererStyleFlags3, isProceduralRenderer} from './interfaces/renderer';
-import {BINDING_INDEX, CLEANUP, CONTAINER_INDEX, CONTENT_QUERIES, CONTEXT, CurrentMatchesList, DECLARATION_VIEW, DIRECTIVES, FLAGS, HEADER_OFFSET, HOST_NODE, INJECTOR, LViewData, LViewFlags, NEXT, OpaqueViewState, PARENT, QUERIES, RENDERER, RootContext, SANITIZER, TAIL, TData, TVIEW, TView} from './interfaces/view';
+import {BINDING_INDEX, CLEANUP, CONTAINER_INDEX, CONTENT_QUERIES, CONTEXT, CurrentMatchesList, DECLARATION_VIEW, FLAGS, HEADER_OFFSET, HOST_NODE, INJECTABLES, INJECTOR, LViewData, LViewFlags, NEXT, OpaqueViewState, PARENT, QUERIES, RENDERER, RootContext, SANITIZER, TAIL, TData, TVIEW, TView} from './interfaces/view';
 import {assertNodeOfPossibleTypes, assertNodeType} from './node_assert';
 import {appendChild, appendProjectedNode, canInsertNativeNode, createTextNode, findComponentHost, getLViewChild, getParentLNode, insertView, removeView} from './node_manipulation';
 import {isNodeMatchingSelectorList, matchingSelectorIndex} from './node_selector_matcher';
@@ -208,12 +208,12 @@ export function _getViewData(): LViewData {
 let contextViewData: LViewData = null !;
 
 /**
- * An array of directive instances in the current view.
+ * An array of injectable records (for providers) or instances (for directives) in the current view.
  *
  * These must be stored separately from LNodes because their presence is
  * unknown at compile-time and thus space cannot be reserved in data[].
  */
-let directives: any[]|null;
+let injectables: any[]|null;
 
 function getCleanup(view: LViewData): any[] {
   // top level variables should not be exported for performance reasons (PERF_NOTES.md)
@@ -265,7 +265,7 @@ const enum BindingDirection {
 export function enterView(
     newView: LViewData, hostTNode: TElementNode | TViewNode | null): LViewData {
   const oldView: LViewData = viewData;
-  directives = newView && newView[DIRECTIVES];
+  injectables = newView && newView[INJECTABLES];
   tView = newView && newView[TVIEW];
 
   creationMode = newView && (newView[FLAGS] & LViewFlags.CreationMode) === LViewFlags.CreationMode;
@@ -294,7 +294,7 @@ export function enterView(
 export function leaveView(newView: LViewData, creationOnly?: boolean): void {
   if (!creationOnly) {
     if (!checkNoChangesMode) {
-      executeHooks(directives !, tView.viewHooks, tView.viewCheckHooks, creationMode);
+      executeHooks(injectables !, tView.viewHooks, tView.viewCheckHooks, creationMode);
     }
     // Views are clean and in update mode after being checked, so these bits are cleared
     viewData[FLAGS] &= ~(LViewFlags.CreationMode | LViewFlags.Dirty);
@@ -323,7 +323,7 @@ function refreshDescendantViews() {
   refreshContentQueries(tView);
 
   if (!checkNoChangesMode) {
-    executeHooks(directives !, tView.contentHooks, tView.contentCheckHooks, creationMode);
+    executeHooks(injectables !, tView.contentHooks, tView.contentCheckHooks, creationMode);
   }
 
   setHostBindings(tView.hostBindings);
@@ -335,7 +335,7 @@ function refreshDescendantViews() {
 export function setHostBindings(bindings: number[] | null): void {
   if (bindings != null) {
     bindingRootIndex = viewData[BINDING_INDEX] = tView.hostBindingStartIndex;
-    const defs = tView.directives !;
+    const defs = tView.injectables !;
     for (let i = 0; i < bindings.length; i += 2) {
       const dirIndex = bindings[i];
       const def = defs[dirIndex] as DirectiveDefInternal<any>;
@@ -350,7 +350,8 @@ function refreshContentQueries(tView: TView): void {
   if (tView.contentQueries != null) {
     for (let i = 0; i < tView.contentQueries.length; i += 2) {
       const directiveDefIdx = tView.contentQueries[i];
-      const directiveDef = tView.directives ![directiveDefIdx];
+      const directiveDef = tView.injectables ![directiveDefIdx] as ComponentDefInternal<any>|
+          DirectiveDefInternal<any>;
 
       directiveDef.contentQueriesRefresh !(directiveDefIdx, tView.contentQueries[i + 1]);
     }
@@ -369,7 +370,7 @@ function refreshChildComponents(components: number[] | null): void {
 export function executeInitAndContentHooks(): void {
   if (!checkNoChangesMode) {
     executeInitHooks(viewData, tView, creationMode);
-    executeHooks(directives !, tView.contentHooks, tView.contentCheckHooks, creationMode);
+    executeHooks(injectables !, tView.contentHooks, tView.contentCheckHooks, creationMode);
   }
 }
 
@@ -876,6 +877,18 @@ function cacheMatchingDirectivesForNode(
   const exportsMap: ({[key: string]: number} | null) = localRefs ? {'': -1} : null;
   const matches = tView.currentMatches = findDirectiveMatches(tNode);
   if (matches) {
+    // When the same token is provided by several directives on the same node, some rules apply in
+    // the viewEngine:
+    // - viewProviders have priority over providers
+    // - the last directive in NgModule.declarations has priority over the previous one
+    // So to match these rules, the order in which providers are added in the arrays is very
+    // important.
+    initNodeFlags(tView.injectables ? tView.injectables.length : 0);
+    for (let i = matches.length - 2; i >= 0; i -= 2) {
+      const def = matches[i] as DirectiveDefInternal<any>;
+      if (def.providersResolver) def.providersResolver(def, i == 0);
+    }
+    injectables = viewData[INJECTABLES];
     for (let i = 0; i < matches.length; i += 2) {
       const def = matches[i] as DirectiveDefInternal<any>;
       const valueIndex = i + 1;
@@ -886,20 +899,26 @@ function cacheMatchingDirectivesForNode(
   if (exportsMap) cacheMatchingLocalNames(tNode, localRefs, exportsMap);
 }
 
-/** Matches the current node against all available selectors. */
+/**
+ * Matches the current node against all available selectors.
+ * If a component is matched (at most one), it is returned in first position in the array.
+ */
 function findDirectiveMatches(tNode: TNode): CurrentMatchesList|null {
   const registry = tView.directiveRegistry;
   let matches: any[]|null = null;
   if (registry) {
     for (let i = 0; i < registry.length; i++) {
-      const def = registry[i];
+      const def = registry[i] as ComponentDefInternal<any>| DirectiveDefInternal<any>;
       if (isNodeMatchingSelectorList(tNode, def.selectors !)) {
         if ((def as ComponentDefInternal<any>).template) {
           if (tNode.flags & TNodeFlags.isComponent) throwMultipleComponentError(tNode);
           tNode.flags = TNodeFlags.isComponent;
+          // The component must be the first match
+          (matches || (matches = [])).unshift(def, null);
+        } else {
+          (matches || (matches = [])).push(def, null);
         }
         if (def.diPublic) def.diPublic(def);
-        (matches || (matches = [])).push(def, null);
       }
     }
   }
@@ -909,16 +928,16 @@ function findDirectiveMatches(tNode: TNode): CurrentMatchesList|null {
 export function resolveDirective(
     def: DirectiveDefInternal<any>, valueIndex: number, matches: CurrentMatchesList,
     tView: TView): any {
+  let instance = null;
   if (matches[valueIndex] === null) {
     matches[valueIndex] = CIRCULAR;
-    const instance = def.factory();
-    (tView.directives || (tView.directives = [])).push(def);
-    return directiveCreate(matches[valueIndex] = tView.directives !.length - 1, instance, def);
+    instance = directiveCreate(def.factory(), def);
+    matches[valueIndex] = tView.injectables !.length - 1;
   } else if (matches[valueIndex] === CIRCULAR) {
     // If we revisit this directive before it's resolved, we know it's circular
     throwCyclicDependencyError(def.type);
   }
-  return null;
+  return instance;
 }
 
 /** Stores index of component's host element so it will be queued for view refresh during CD. */
@@ -975,11 +994,12 @@ function instantiateDirectivesDirectly() {
   if (count > 0) {
     const start = previousOrParentTNode.flags >> TNodeFlags.DirectiveStartingIndexShift;
     const end = start + count;
-    const tDirectives = tView.directives !;
+    const tDirectives = tView.injectables !;
 
     for (let i = start; i < end; i++) {
-      const def: DirectiveDefInternal<any> = tDirectives[i];
-      directiveCreate(i, def.factory(), def);
+      const def: DirectiveDefInternal<any> =
+          tDirectives[i] as ComponentDefInternal<any>| DirectiveDefInternal<any>;
+      directiveCreate(def.factory(), def);
     }
   }
 }
@@ -1025,7 +1045,7 @@ function saveResolvedLocalsInData(
     let localIndex = lNode.tNode.index + 1;
     for (let i = 0; i < localNames.length; i += 2) {
       const index = localNames[i + 1] as number;
-      const value = index === -1 ? localRefExtractor(lNode) : directives ![index];
+      const value = index === -1 ? localRefExtractor(lNode) : injectables ![index];
       viewData[localIndex++] = value;
     }
   }
@@ -1088,7 +1108,7 @@ export function createTView(
     childIndex: -1,               // Children set in addToViewTree(), if any
     bindingStartIndex: bindingStartIndex,
     hostBindingStartIndex: initialViewLength,
-    directives: null,
+    injectables: null,
     firstTemplatePass: true,
     initHooks: null,
     checkHooks: null,
@@ -1205,7 +1225,6 @@ export function hostElement(
   if (firstTemplatePass) {
     node.tNode.flags = TNodeFlags.isComponent;
     if (def.diPublic) def.diPublic(def);
-    tView.directives = [def];
   }
 
   return node;
@@ -1270,8 +1289,8 @@ export function listener(
  */
 function createOutput(outputs: PropertyAliasValue, listener: Function): void {
   for (let i = 0; i < outputs.length; i += 2) {
-    ngDevMode && assertDataInRange(outputs[i] as number, directives !);
-    const subscription = directives ![outputs[i] as number][outputs[i + 1]].subscribe(listener);
+    ngDevMode && assertDataInRange(outputs[i] as number, injectables !);
+    const subscription = injectables ![outputs[i] as number][outputs[i + 1]].subscribe(listener);
     storeCleanupWithContext(viewData, subscription, subscription.unsubscribe);
   }
 }
@@ -1412,6 +1431,7 @@ export function createTNode(
     type: type,
     index: adjustedIndex,
     flags: 0,
+    providerIndexes: 0,
     tagName: tagName,
     attrs: attrs,
     localNames: null,
@@ -1435,8 +1455,8 @@ export function createTNode(
  */
 function setInputsForProperty(inputs: PropertyAliasValue, value: any): void {
   for (let i = 0; i < inputs.length; i += 2) {
-    ngDevMode && assertDataInRange(inputs[i] as number, directives !);
-    directives ![inputs[i] as number][inputs[i + 1]] = value;
+    ngDevMode && assertDataInRange(inputs[i] as number, injectables !);
+    injectables ![inputs[i] as number][inputs[i + 1]] = value;
   }
 }
 
@@ -1456,7 +1476,7 @@ function generatePropertyAliases(
     const start = tNodeFlags >> TNodeFlags.DirectiveStartingIndexShift;
     const end = start + count;
     const isInput = direction === BindingDirection.Input;
-    const defs = tView.directives !;
+    const defs = tView.injectables !;
 
     for (let i = start; i < end; i++) {
       const directiveDef = defs[i] as DirectiveDefInternal<any>;
@@ -1691,6 +1711,36 @@ export function textBinding<T>(index: number, value: T | NO_CHANGE): void {
 //////////////////////////
 
 /**
+ * Initializes the flags on the current node, setting all indices to the initial index,
+ * the directive count to 0, and adding the isComponent flag.
+ * @param index the initial index
+ */
+function initNodeFlags(index: number) {
+  const flags = previousOrParentTNode.flags;
+  if (firstTemplatePass) {
+    if (flags === 0 || flags === TNodeFlags.isComponent) {
+      // When the first directive is created on a node, save the index
+      previousOrParentTNode.flags =
+          index << TNodeFlags.DirectiveStartingIndexShift | flags & TNodeFlags.isComponent;
+      previousOrParentTNode.providerIndexes = index;
+    }
+  }
+}
+
+/**
+ * Instantiate a directive and resolve its providers.
+ */
+export function resolveProvidersAndInstantiateDirective<T>(
+    index: number, directiveDef: DirectiveDefInternal<T>| ComponentDefInternal<T>): T {
+  initNodeFlags(index);
+  if (directiveDef.providersResolver) {
+    directiveDef.providersResolver(directiveDef, true);
+    injectables = viewData[INJECTABLES];
+  }
+  return directiveDef.factory() as T;
+}
+
+/**
  * Create a directive and their associated content queries.
  *
  * NOTE: directives can be created in order other than the index order. They can also
@@ -1700,15 +1750,16 @@ export function textBinding<T>(index: number, value: T | NO_CHANGE): void {
  * @param directiveDef DirectiveDef object which contains information about the template.
  */
 export function directiveCreate<T>(
-    directiveDefIdx: number, directive: T,
-    directiveDef: DirectiveDefInternal<T>| ComponentDefInternal<T>): T {
+    directive: T, directiveDef: DirectiveDefInternal<T>| ComponentDefInternal<T>): T {
   const hostNode = getPreviousOrParentNode();
-  const instance = baseDirectiveCreate(directiveDefIdx, directive, directiveDef, hostNode);
+  const instance = baseDirectiveCreate(directive, directiveDef, hostNode);
+  const directiveDefIdx = injectables !.length - 1;
+
+  ngDevMode && assertDefined(previousOrParentTNode, 'previousOrParentNode.tNode');
 
   const isComponent = (directiveDef as ComponentDefInternal<T>).template;
   if (isComponent) {
-    addComponentLogic(
-        directiveDefIdx, directive, directiveDef as ComponentDefInternal<T>, hostNode);
+    addComponentLogic(directive, directiveDef as ComponentDefInternal<T>, hostNode);
   }
 
   if (firstTemplatePass) {
@@ -1731,8 +1782,7 @@ export function directiveCreate<T>(
   return instance;
 }
 
-function addComponentLogic<T>(
-    directiveIndex: number, instance: T, def: ComponentDefInternal<T>, hostNode: LNode): void {
+function addComponentLogic<T>(instance: T, def: ComponentDefInternal<T>, hostNode: LNode): void {
   const tView = getOrCreateTView(
       def.template, def.consts, def.vars, def.directiveDefs, def.pipeDefs, def.viewQuery);
 
@@ -1761,7 +1811,7 @@ function addComponentLogic<T>(
  * current Angular. Example: local refs and inputs on root component.
  */
 export function baseDirectiveCreate<T>(
-    index: number, directive: T, directiveDef: DirectiveDefInternal<T>| ComponentDefInternal<T>,
+    directive: T, directiveDef: DirectiveDefInternal<T>| ComponentDefInternal<T>,
     hostNode: LNode): T {
   ngDevMode && assertEqual(
                    viewData[BINDING_INDEX], tView.bindingStartIndex,
@@ -1770,26 +1820,18 @@ export function baseDirectiveCreate<T>(
 
   attachPatchData(directive, viewData);
 
-  if (directives == null) viewData[DIRECTIVES] = directives = [];
+  if (injectables == null) viewData[INJECTABLES] = injectables = [];
+  if (tView.injectables == null) tView.injectables = [];
 
-  ngDevMode && assertDataNext(index, directives);
-  directives[index] = directive;
+  tView.injectables.push(directiveDef);
+  injectables.push(directive);
 
   if (firstTemplatePass) {
-    const flags = previousOrParentTNode.flags;
-    if ((flags & TNodeFlags.DirectiveCountMask) === 0) {
-      // When the first directive is created:
-      // - save the index,
-      // - set the number of directives to 1
-      previousOrParentTNode.flags =
-          index << TNodeFlags.DirectiveStartingIndexShift | flags & TNodeFlags.isComponent | 1;
-    } else {
-      // Only need to bump the size when subsequent directives are created
-      ngDevMode && assertNotEqual(
-                       flags & TNodeFlags.DirectiveCountMask, TNodeFlags.DirectiveCountMask,
-                       'Reached the max number of directives');
-      previousOrParentTNode.flags++;
-    }
+    // Only need to bump the size when subsequent directives are created
+    ngDevMode && assertNotEqual(
+                     previousOrParentTNode.flags & TNodeFlags.DirectiveCountMask,
+                     TNodeFlags.DirectiveCountMask, 'Reached the max number of directives');
+    previousOrParentTNode.flags++;
   } else {
     const diPublic = directiveDef !.diPublic;
     if (diPublic) diPublic(directiveDef !);
@@ -2768,9 +2810,9 @@ function walkUpViews(nestingLevel: number, currentView: LViewData): LViewData {
 
 /** Retrieves a value from the `directives` array. */
 export function loadDirective<T>(index: number): T {
-  ngDevMode && assertDefined(directives, 'Directives array should be defined if reading a dir.');
-  ngDevMode && assertDataInRange(index, directives !);
-  return directives ![index];
+  ngDevMode && assertDefined(injectables, 'Directives array should be defined if reading a dir.');
+  ngDevMode && assertDataInRange(index, injectables !);
+  return injectables ![index];
 }
 
 export function loadQueryList<T>(queryListIdx: number): QueryList<T> {
@@ -2852,7 +2894,7 @@ export function registerContentQuery<Q>(queryList: QueryList<Q>): void {
   const savedContentQueriesLength =
       (viewData[CONTENT_QUERIES] || (viewData[CONTENT_QUERIES] = [])).push(queryList);
   if (firstTemplatePass) {
-    const currentDirectiveIndex = directives !.length - 1;
+    const currentDirectiveIndex = injectables !.length - 1;
     const tViewContentQueries = tView.contentQueries || (tView.contentQueries = []);
     const lastSavedDirectiveIndex =
         tView.contentQueries.length ? tView.contentQueries[tView.contentQueries.length - 2] : -1;

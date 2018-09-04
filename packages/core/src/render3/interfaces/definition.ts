@@ -6,7 +6,7 @@
  * found in the LICENSE file at https://angular.io/license
  */
 
-import {Provider, ViewEncapsulation} from '../../core';
+import {InjectionToken, Provider, ViewEncapsulation} from '../../core';
 import {Type} from '../../type';
 import {CssSelectorList} from './projection';
 
@@ -117,8 +117,11 @@ export interface DirectiveDef<T, Selector extends string> extends BaseDef<T> {
   /** Function that makes a directive public to the DI system. */
   diPublic: ((def: DirectiveDef<T, string>) => void)|null;
 
+  /** Function that resolves providers and publishes them into the DI system. */
+  providersResolver: ((def: DirectiveDef<T, string>, isLast: boolean) => void)|null;
+
   /** The selectors that will be used to match nodes to this directive. */
-  selectors: CssSelectorList;
+  readonly selectors: CssSelectorList;
 
   /**
    * Name under which the directive is exported (for use with local references in template)
@@ -144,7 +147,7 @@ export interface DirectiveDef<T, Selector extends string> extends BaseDef<T> {
    * Used to calculate the length of the LViewData array for the *parent* component
    * of this directive/component.
    */
-  hostVars: number;
+  readonly hostVars: number;
 
   /** Refreshes host bindings on the associated directive. */
   hostBindings: ((directiveIndex: number, elementIndex: number) => void)|null;
@@ -155,7 +158,7 @@ export interface DirectiveDef<T, Selector extends string> extends BaseDef<T> {
    * Even indices: attribute name
    * Odd indices: attribute value
    */
-  attributes: string[]|null;
+  readonly attributes: string[]|null;
 
   /* The following are lifecycle hooks for this component */
   onInit: (() => void)|null;
@@ -169,7 +172,7 @@ export interface DirectiveDef<T, Selector extends string> extends BaseDef<T> {
   /**
    * The features applied to this directive
    */
-  features: DirectiveDefFeature[]|null;
+  readonly features: DirectiveDefFeature[]|null;
 }
 
 /**
@@ -194,7 +197,7 @@ export interface ComponentDef<T, Selector extends string> extends DirectiveDef<T
   /**
    * Runtime unique component ID.
    */
-  id: string;
+  readonly id: string;
 
   /**
    * The View template of the component.
@@ -213,7 +216,7 @@ export interface ComponentDef<T, Selector extends string> extends DirectiveDef<T
    * can pre-fill the array and set the binding start index.
    */
   // TODO(kara): remove queries from this count
-  consts: number;
+  readonly consts: number;
 
   /**
    * The number of bindings in this component template (including pure fn bindings).
@@ -221,7 +224,7 @@ export interface ComponentDef<T, Selector extends string> extends DirectiveDef<T
    * Used to calculate the length of the component's LViewData array, so we
    * can pre-fill the array and set the host binding start index.
    */
-  vars: number;
+  readonly vars: number;
 
   /**
    * Query-related instructions for a component.
@@ -249,18 +252,7 @@ export interface ComponentDef<T, Selector extends string> extends DirectiveDef<T
   readonly onPush: boolean;
 
   /**
-   * Defines the set of injectable providers that are visible to a Directive and its content DOM
-   * children.
-   */
-  readonly providers: Provider[]|null;
 
-  /**
-   * Defines the set of injectable providers that are visible to a Directive and its view DOM
-   * children only.
-   */
-  readonly viewProviders: Provider[]|null;
-
-  /**
    * Registry of directives and components that may be found in this view.
    *
    * The property is either an array of `DirectiveDef`s or a function which returns the array of
@@ -295,7 +287,7 @@ export interface PipeDef<T, S extends string> {
    *
    * Used to resolve pipe in templates.
    */
-  name: S;
+  readonly name: S;
 
   /**
    * Factory function used to create a new pipe instance.
@@ -308,7 +300,7 @@ export interface PipeDef<T, S extends string> {
    * Pure pipes result only depends on the pipe input and not on internal
    * state of the pipe.
    */
-  pure: boolean;
+  readonly pure: boolean;
 
   /* The following are lifecycle hooks for this pipe */
   onDestroy: (() => void)|null;
@@ -357,3 +349,10 @@ export const unusedValueExportToPlacateAjd = 1;
 export const enum InitialStylingFlags {
   VALUES_MODE = 0b1,
 }
+
+/**
+ * Type used to store injectable "definitions" in TView.
+ * They can be Type, injection token, directive definition, or component definition.
+ */
+export type InjectableDefList =
+    (Type<any>| InjectionToken<any>| DirectiveDef<any, string>| ComponentDef<any, string>)[];

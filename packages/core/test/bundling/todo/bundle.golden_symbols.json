@@ -33,9 +33,6 @@
     "name": "DECLARATION_VIEW"
   },
   {
-    "name": "DIRECTIVES"
-  },
-  {
     "name": "DefaultIterableDiffer"
   },
   {
@@ -57,6 +54,9 @@
     "name": "FLAGS"
   },
   {
+    "name": "FactoryPrototype"
+  },
+  {
     "name": "HEADER_FILLER"
   },
   {
@@ -64,6 +64,9 @@
   },
   {
     "name": "HOST_NODE"
+  },
+  {
+    "name": "INJECTABLES"
   },
   {
     "name": "INJECTOR$1"
@@ -304,9 +307,6 @@
   },
   {
     "name": "_c9"
-  },
-  {
-    "name": "_currentInjector"
   },
   {
     "name": "_currentNamespace"
@@ -576,6 +576,9 @@
     "name": "getComponentDef"
   },
   {
+    "name": "getClosestComponentAncestorWithInjector"
+  },
+  {
     "name": "getCurrentSanitizer"
   },
   {
@@ -705,7 +708,10 @@
     "name": "initChangeDetectorIfExisting"
   },
   {
-    "name": "inject"
+    "name": "initNodeFlags"
+  },
+  {
+    "name": "injectFromRoot"
   },
   {
     "name": "injectTemplateRef"
@@ -745,6 +751,9 @@
   },
   {
     "name": "isDirty"
+  },
+  {
+    "name": "isFactory"
   },
   {
     "name": "isJsObject"
@@ -894,6 +903,9 @@
     "name": "resolveDirective"
   },
   {
+    "name": "resolveProvidersAndInstantiateDirective"
+  },
+  {
     "name": "restoreView"
   },
   {
@@ -916,9 +928,6 @@
   },
   {
     "name": "setContextDirty"
-  },
-  {
-    "name": "setCurrentInjector"
   },
   {
     "name": "setDirty"

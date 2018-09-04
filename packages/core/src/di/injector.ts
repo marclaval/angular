@@ -429,6 +429,16 @@ export function setCurrentInjector(injector: Injector | null | undefined): Injec
   _currentInjector = injector;
   return former;
 }
+/**
+* Current implementation of inject.
+*
+* By default, it is `injectInjectorOnly`, which makes it `Injector`-only aware. It can be change
+* to `directiveInject`, which is brings in the `NodeInjector` system of ivy. It is designed this
+* way for two reasons:
+*  1. `Injector` should not depend on ivy logic.
+*  2. To maintain tree shake-ability we don't want to bring in unnecessary code.
+*/
+let _injectImplementation = injectInjectorOnly;
 
 /**
  * Injects a token from the currently active injector.
@@ -450,19 +460,44 @@ export function setCurrentInjector(injector: Injector | null | undefined): Injec
 export function inject<T>(token: Type<T>| InjectionToken<T>): T;
 export function inject<T>(token: Type<T>| InjectionToken<T>, flags?: InjectFlags): T|null;
 export function inject<T>(token: Type<T>| InjectionToken<T>, flags = InjectFlags.Default): T|null {
+  return _injectImplementation(token, flags);
+}
+
+/**
+ * Sets the current inject implementation.
+ */
+export function setInjectImplementation(
+    impl: <T>(token: Type<T>| InjectionToken<T>, flags?: InjectFlags) => T | null) {
+  _injectImplementation = impl;
+}
+
+export function injectInjectorOnly<T>(token: Type<T>| InjectionToken<T>): T;
+export function injectInjectorOnly<T>(token: Type<T>| InjectionToken<T>, flags?: InjectFlags): T|
+    null;
+export function injectInjectorOnly<T>(
+    token: Type<T>| InjectionToken<T>, flags = InjectFlags.Default): T|null {
   if (_currentInjector === undefined) {
     throw new Error(`inject() must be called from an injection context`);
   } else if (_currentInjector === null) {
-    const injectableDef: InjectableDef<T>|null = getInjectableDef(token);
-    if (injectableDef && injectableDef.providedIn == 'root') {
-      return injectableDef.value === undefined ? injectableDef.value = injectableDef.factory() :
-                                                 injectableDef.value;
-    }
-    if (flags & InjectFlags.Optional) return null;
-    throw new Error(`Injector: NOT_FOUND [${stringify(token)}]`);
+    return injectFromRoot(token, flags);
   } else {
     return _currentInjector.get(token, flags & InjectFlags.Optional ? null : undefined, flags);
   }
+}
+
+/**
+ * Injects a token if it is provided at root level, throws otherwise.
+ * In the resolution algorithm, this is done as a last step if resolving from element and module
+ * injectors was not successful.
+ */
+export function injectFromRoot<T>(token: Type<T>| InjectionToken<T>, flags: InjectFlags): T|null {
+  const injectableDef: InjectableDef<T>|null = getInjectableDef(token);
+  if (injectableDef && injectableDef.providedIn == 'root') {
+    return injectableDef.value === undefined ? injectableDef.value = injectableDef.factory() :
+                                               injectableDef.value;
+  }
+  if (flags & InjectFlags.Optional) return null;
+  throw new Error(`Injector: NOT_FOUND [${stringify(token)}]`);
 }
 
 export function injectArgs(types: (Type<any>| InjectionToken<any>| any[])[]): any[] {

@@ -15,7 +15,7 @@ import {getLElementNode} from './context_discovery';
 import * as di from './di';
 import {_getViewData} from './instructions';
 import {LElementNode} from './interfaces/node';
-import {CONTEXT, DIRECTIVES, LViewData, TVIEW} from './interfaces/view';
+import {CONTEXT, INJECTABLES, LViewData, TVIEW} from './interfaces/view';
 
 /**
  * Adapts the DebugRendererFactory2 to create a DebugRenderer2 specific for IVY.
@@ -80,12 +80,12 @@ class Render3DebugContext implements DebugContext {
       return matchedDirectives;
     }
 
-    const directives = this.view[DIRECTIVES];
+    const injectables = this.view[INJECTABLES];
 
-    if (directives) {
+    if (injectables) {
       const currentNode = this.view[this.nodeIndex];
-      for (let dirIndex = 0; dirIndex < directives.length; dirIndex++) {
-        const directive = directives[dirIndex];
+      for (let dirIndex = 0; dirIndex < injectables.length; dirIndex++) {
+        const directive = injectables[dirIndex];
         if (getLElementNode(directive) === currentNode) {
           matchedDirectives.push(directive.constructor);
         }

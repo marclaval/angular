@@ -11,7 +11,7 @@ import {QueryList} from '../../linker';
 import {Sanitizer} from '../../sanitization/security';
 
 import {LContainer} from './container';
-import {ComponentQuery, ComponentTemplate, DirectiveDefInternal, DirectiveDefList, PipeDefInternal, PipeDefList} from './definition';
+import {ComponentQuery, ComponentTemplate, DirectiveDefInternal, DirectiveDefList, InjectableDefList, PipeDefInternal, PipeDefList} from './definition';
 import {LElementNode, LViewNode, TElementNode, TNode, TViewNode} from './node';
 import {LQueries} from './query';
 import {Renderer3} from './renderer';
@@ -29,7 +29,7 @@ export const QUERIES = 3;
 export const FLAGS = 4;
 export const HOST_NODE = 5;
 export const BINDING_INDEX = 6;
-export const DIRECTIVES = 7;
+export const INJECTABLES = 7;
 export const CLEANUP = 8;
 export const CONTEXT = 9;
 export const INJECTOR = 10;
@@ -114,13 +114,16 @@ export interface LViewData extends Array<any> {
   [BINDING_INDEX]: number;
 
   /**
-   * An array of directive instances in the current view.
+   * An array of injectable records (for providers) or instances (for directives) in the current
+   * view.
    *
    * These must be stored separately from LNodes because their presence is
    * unknown at compile-time and thus space cannot be reserved in data[].
+   *
+   * See explanation about the structure in TView.injectables below.
    */
   // TODO: flatten into LViewData[]
-  [DIRECTIVES]: any[]|null;
+  [INJECTABLES]: any[]|null;
 
   /**
    * When a view is destroyed, listeners need to be released and outputs need to be
@@ -344,13 +347,40 @@ export interface TView {
   currentMatches: CurrentMatchesList|null;
 
   /**
-   * Directive and component defs that have already been matched to nodes on
+   * Provider tokens and directive defs that have already been matched to nodes on
    * this view.
    *
-   * Defs are stored at the same index in TView.directives[] as their instances
+   * Tokens and defs are stored at the same index in TView.directives[] as their instances
    * are stored in LView.directives[]. This simplifies lookup in DI.
+   *
+   * For each node of the view, this array has a section whose structure is:
+   * [--- multi ---|--- providers of ---|- viewProviders -|-- providers ---|- directives -]
+   *  - providers -|- other directives -|-- of component -|- of component -|--------------]
+   * A                                                                     B
+   *                                    <-------- C ------><------ D ------><---- E ------>
+   *
+   * At TNode level, some static data are stored to access the different parts:
+   * - A: a pointer to the beginning of the structure
+   * - B: a pointer to the beginning of the directives section
+   * - C: the number of view providers on the component
+   * - D: the number of providers on the component
+   * - E: the number of directives
+   *
+   * At creation time, the good thing is that we can simply always push in the 2 arrays,
+   * if we process things in the right order once we have the list of matching directives
+   * Thus, we can avoid costly splice-like operations.
+   * It also guarantees that all providers are already known before we start to instantiate
+   * directives.
+   *
+   * When looking up for a DI token (after maybe finding it with the bloom filter),
+   * there is a only need to know if the node has access to viewProviders or not.
+   * Then, we can simply process the structure from A to B, and use C and D to figure out view
+   * providers.
+   *
+   * The parts of the code which need to go through the list of directives can process the structure
+   * from B to B+E.
    */
-  directives: DirectiveDefList|null;
+  injectables: InjectableDefList|null;
 
   /**
    * Full registry of directives and components that may be found in this view.

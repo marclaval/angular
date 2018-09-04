@@ -38,6 +38,7 @@ export const angularCoreEnv: {[name: string]: Function} = {
   'ɵinjectRenderer2': r3.injectRenderer2,
   'ɵNgOnChangesFeature': r3.NgOnChangesFeature,
   'ɵPublicFeature': r3.PublicFeature,
+  'ɵProvidesResolver': r3.ProvidesFeature,
   'ɵInheritDefinitionFeature': r3.InheritDefinitionFeature,
   'ɵelementAttribute': r3.elementAttribute,
   'ɵbind': r3.bind,

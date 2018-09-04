@@ -69,6 +69,9 @@
     "name": "_currentInjector"
   },
   {
+    "name": "_injectImplementation"
+  },
+  {
     "name": "couldBeInjectableType"
   },
   {
@@ -111,7 +114,13 @@
     "name": "injectArgs"
   },
   {
-    "name": "injectableDefRecord"
+    "name": "injectFromRoot"
+  },
+  {
+    "name": "injectInjectorOnly"
+  },
+  {
+    "name": "injectableDefFactory"
   },
   {
     "name": "isExistingProvider"
@@ -133,6 +142,9 @@
   },
   {
     "name": "makeRecord"
+  },
+  {
+    "name": "providerToFactory"
   },
   {
     "name": "providerToRecord"

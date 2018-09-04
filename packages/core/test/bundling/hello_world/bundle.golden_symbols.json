@@ -21,9 +21,6 @@
     "name": "ChangeDetectionStrategy"
   },
   {
-    "name": "DIRECTIVES"
-  },
-  {
     "name": "EMPTY$1"
   },
   {
@@ -40,6 +37,9 @@
   },
   {
     "name": "HOST_NODE"
+  },
+  {
+    "name": "INJECTABLES"
   },
   {
     "name": "INJECTOR$1"
@@ -261,6 +261,9 @@
     "name": "initChangeDetectorIfExisting"
   },
   {
+    "name": "initNodeFlags"
+  },
+  {
     "name": "invertObject"
   },
   {
@@ -313,6 +316,9 @@
   },
   {
     "name": "resetComponentState"
+  },
+  {
+    "name": "resolveProvidersAndInstantiateDirective"
   },
   {
     "name": "setHostBindings"
