@@ -135,6 +135,9 @@ export function extractDirectiveMetadata(
 
   const host = extractHostBindings(directive, decoratedElements, reflector, checker, coreModule);
 
+  const providers: Expression|null =
+      directive.has('providers') ? new WrappedNodeExpr(directive.get('providers') !) : null;
+
   // Determine if `ngOnChanges` is a lifecycle hook defined on the component.
   const usesOnChanges = members.some(
       member => !member.isStatic && member.kind === ClassMemberKind.Method &&
@@ -165,7 +168,7 @@ export function extractDirectiveMetadata(
     outputs: {...outputsFromMeta, ...outputsFromFields}, queries, selector,
     type: new WrappedNodeExpr(clazz.name !),
     typeArgumentCount: reflector.getGenericArityOfClass(clazz) || 0,
-    typeSourceSpan: null !, usesInheritance, exportAs,
+    typeSourceSpan: null !, usesInheritance, exportAs, providers
   };
   return {decoratedElements, decorator: directive, metadata};
 }

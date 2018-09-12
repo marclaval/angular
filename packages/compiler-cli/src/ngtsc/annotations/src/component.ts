@@ -111,6 +111,10 @@ export class ComponentDecoratorHandler implements DecoratorHandler<R3ComponentMe
       preserveWhitespaces = value;
     }
 
+    const viewProviders: Expression|null = component.has('viewProviders') ?
+        new WrappedNodeExpr(component.get('viewProviders') !) :
+        null;
+
     // Go through the root directories for this project, and select the one with the smallest
     // relative path representation.
     const filePath = node.getSourceFile().fileName;
@@ -184,7 +188,7 @@ export class ComponentDecoratorHandler implements DecoratorHandler<R3ComponentMe
         // analyzed and the full compilation scope for the component can be realized.
         pipes: EMPTY_MAP,
         directives: EMPTY_MAP,
-        wrapDirectivesInClosure: false, animations,
+        wrapDirectivesInClosure: false, animations, viewProviders
       }
     };
   }

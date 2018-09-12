@@ -180,6 +180,8 @@ export class Identifiers {
 
   static PublicFeature: o.ExternalReference = {name: 'ɵPublicFeature', moduleName: CORE};
 
+  static ProvidersFeature: o.ExternalReference = {name: 'ɵProvidersFeature', moduleName: CORE};
+
   static listener: o.ExternalReference = {name: 'ɵlistener', moduleName: CORE};
 
   static getFactoryOf: o.ExternalReference = {

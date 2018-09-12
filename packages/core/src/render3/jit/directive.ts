@@ -77,7 +77,9 @@ export function compileComponent(type: Type<any>, metadata: Component): void {
               wrapDirectivesInClosure: false,
               styles: metadata.styles || [],
               encapsulation: metadata.encapsulation || ViewEncapsulation.Emulated,
-              animations: metadata.animations || null
+              animations: metadata.animations || null,
+              viewProviders: metadata.viewProviders ? new WrappedNodeExpr(metadata.viewProviders) :
+                                                      null
             },
             constantPool, makeBindingParser());
         const preStatements = [...constantPool.statements, ...res.statements];
@@ -178,6 +180,7 @@ function directiveMetadata(type: Type<any>, metadata: Directive): R3DirectiveMet
     typeSourceSpan: null !,
     usesInheritance: !extendsDirectlyFromObject(type),
     exportAs: metadata.exportAs || null,
+    providers: metadata.providers ? new WrappedNodeExpr(metadata.providers) : null
   };
 }
 

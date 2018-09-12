@@ -82,11 +82,33 @@ function baseDirectiveFields(
   // e.g 'outputs: {a: 'a'}`
   definitionMap.set('outputs', conditionallyCreateMapObjectLiteral(meta.outputs));
 
+  if (meta.exportAs !== null) {
+    definitionMap.set('exportAs', o.literal(meta.exportAs));
+  }
+
+  return {definitionMap, statements: result.statements};
+}
+
+/**
+ * Add features to the definition map.
+ */
+function addFeatures(
+    definitionMap: DefinitionMap, meta: R3DirectiveMetadata | R3ComponentMetadata) {
   // e.g. `features: [NgOnChangesFeature]`
   const features: o.Expression[] = [];
 
   // TODO: add `PublicFeature` so that directives get registered to the DI - make this configurable
   features.push(o.importExpr(R3.PublicFeature));
+
+  const providers = meta.providers;
+  const viewProviders = (meta as R3ComponentMetadata).viewProviders;
+  if (providers || viewProviders) {
+    const args = [providers || new o.LiteralArrayExpr([])];
+    if (viewProviders) {
+      args.push(viewProviders);
+    }
+    features.push(o.importExpr(R3.ProvidersFeature).callFn(args));
+  }
 
   if (meta.usesInheritance) {
     features.push(o.importExpr(R3.InheritDefinitionFeature));
@@ -97,11 +119,6 @@ function baseDirectiveFields(
   if (features.length) {
     definitionMap.set('features', o.literalArr(features));
   }
-  if (meta.exportAs !== null) {
-    definitionMap.set('exportAs', o.literal(meta.exportAs));
-  }
-
-  return {definitionMap, statements: result.statements};
 }
 
 /**
@@ -111,6 +128,7 @@ export function compileDirectiveFromMetadata(
     meta: R3DirectiveMetadata, constantPool: ConstantPool,
     bindingParser: BindingParser): R3DirectiveDef {
   const {definitionMap, statements} = baseDirectiveFields(meta, constantPool, bindingParser);
+  addFeatures(definitionMap, meta);
   const expression = o.importExpr(R3.defineDirective).callFn([definitionMap.toLiteralMap()]);
 
   // On the type side, remove newlines from the selector as it will need to fit into a TypeScript
@@ -167,6 +185,7 @@ export function compileComponentFromMetadata(
     meta: R3ComponentMetadata, constantPool: ConstantPool,
     bindingParser: BindingParser): R3ComponentDef {
   const {definitionMap, statements} = baseDirectiveFields(meta, constantPool, bindingParser);
+  addFeatures(definitionMap, meta);
 
   const selector = meta.selector && CssSelector.parse(meta.selector);
   const firstSelector = selector && selector[0];
@@ -326,7 +345,9 @@ export function compileComponentFromRender2(
     styles: (summary.template && summary.template.styles) || EMPTY_ARRAY,
     encapsulation:
         (summary.template && summary.template.encapsulation) || core.ViewEncapsulation.Emulated,
-    animations
+    animations,
+    viewProviders:
+        component.viewProviders.length > 0 ? new o.WrappedNodeExpr(component.viewProviders) : null
   };
   const res = compileComponentFromMetadata(meta, outputCtx.constantPool, bindingParser);
 
@@ -369,6 +390,7 @@ function directiveMetadataFromGlobalMetadata(
     outputs: directive.outputs,
     usesInheritance: false,
     exportAs: null,
+    providers: directive.providers.length > 0 ? new o.WrappedNodeExpr(directive.providers) : null
   };
 }
 
