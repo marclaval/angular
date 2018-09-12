@@ -615,12 +615,6 @@ export const defineDirective = defineComponent as any as<T>(directiveDefinition:
    * See: {@link Directive.exportAs}
    */
   exportAs?: string;
-
-  /**
-   * Defines the set of injectable objects that are visible to a Directive and its light DOM
-   * children.
-   */
-  providers?: Provider[];
 }) => never;
 
 /**

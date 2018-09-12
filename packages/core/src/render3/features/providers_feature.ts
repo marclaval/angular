@@ -31,13 +31,13 @@ import {DirectiveDef} from '../interfaces/definition';
  *        textBinding(0, bind(ctx.greeter.greet()));
  *      }
  *    },
- *    features: [ProvidesFeature([GreeterDE])]
+ *    features: [ProvidersFeature([GreeterDE])]
  *  });
  * }
  *
  * @param definition
  */
-export function ProvidesFeature<T>(providers: Provider[], viewProviders: Provider[] = []) {
+export function ProvidersFeature<T>(providers: Provider[], viewProviders: Provider[] = []) {
   return (definition: DirectiveDef<T, string>) => {
     definition.providersResolver = (def: DirectiveDef<T, string>, isLast: boolean) =>
         providersResolver(def, providers, viewProviders, isLast);

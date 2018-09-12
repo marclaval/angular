@@ -975,6 +975,9 @@
     "name": "__extends$u"
   },
   {
+    "name": "__forward_ref__"
+  },
+  {
     "name": "__read"
   },
   {
@@ -2253,7 +2256,7 @@
     "name": "resolveProvider"
   },
   {
-    "name": "resolveProvidersAndInstantiateDirective"
+    "name": "resolveProvidersAndInstantiateComponent"
   },
   {
     "name": "resolveToken"

@@ -10,7 +10,7 @@ import {Component, Directive, ElementRef, Injectable, InjectionToken, ViewEncaps
 import {injectInjectorOnly, setInjectImplementation} from '../../src/di/injector';
 import {getRenderedText} from '../../src/render3/component';
 
-import {AttributeMarker, ComponentFactory, LifecycleHooksFeature, defineComponent, defineDirective, directiveInject, markDirty, template, ProvidesFeature} from '../../src/render3/index';
+import {AttributeMarker, ComponentFactory, LifecycleHooksFeature, defineComponent, defineDirective, directiveInject, markDirty, template, ProvidersFeature} from '../../src/render3/index';
 import {bind, container, containerRefreshEnd, containerRefreshStart, element, elementEnd, elementProperty, elementStart, embeddedViewEnd, embeddedViewStart, nextContext, text, textBinding, tick, projectionDef, projection} from '../../src/render3/instructions';
 import {ComponentDefInternal, RenderFlags} from '../../src/render3/interfaces/definition';
 
@@ -638,7 +638,7 @@ describe('providers', () => {
               textBinding(0, bind(ctx.greeter.greet()));
             }
           },
-          features: [ProvidesFeature([GreeterDE])]
+          features: [ProvidersFeature([GreeterDE])]
         });
       }
 
@@ -668,7 +668,7 @@ describe('providers', () => {
               textBinding(0, bind(ctx.greeter.greet()));
             }
           },
-          features: [ProvidesFeature([{provide: Greeter, useValue: new GreeterDE()}])]
+          features: [ProvidersFeature([{provide: Greeter, useValue: new GreeterDE()}])]
         });
       }
 
@@ -698,7 +698,7 @@ describe('providers', () => {
               textBinding(0, bind(ctx.greeter.greet()));
             }
           },
-          features: [ProvidesFeature([{provide: Greeter, useClass: GreeterDE}])]
+          features: [ProvidersFeature([{provide: Greeter, useClass: GreeterDE}])]
         });
       }
 
@@ -728,7 +728,7 @@ describe('providers', () => {
               textBinding(0, bind(ctx.greeter.greet()));
             }
           },
-          features: [ProvidesFeature([GreeterDE, {provide: Greeter, useExisting: GreeterDE}])]
+          features: [ProvidersFeature([GreeterDE, {provide: Greeter, useExisting: GreeterDE}])]
         });
       }
 
@@ -758,7 +758,7 @@ describe('providers', () => {
               textBinding(0, bind(ctx.greeter.greet()));
             }
           },
-          features: [ProvidesFeature([{provide: Greeter, useFactory: () => new GreeterDE()}])]
+          features: [ProvidersFeature([{provide: Greeter, useFactory: () => new GreeterDE()}])]
         });
       }
 
@@ -793,7 +793,7 @@ describe('providers', () => {
               textBinding(0, bind(ctx.greeter.greet()));
             }
           },
-          features: [ProvidesFeature([
+          features: [ProvidersFeature([
             {provide: MESSAGE, useValue: 'Cześć'},
             {provide: Greeter, useClass: GreeterDeps, deps: [MESSAGE]}
           ])]
@@ -830,7 +830,7 @@ describe('providers', () => {
               textBinding(0, bind(ctx.greeter.greet()));
             }
           },
-          features: [ProvidesFeature([
+          features: [ProvidersFeature([
             {provide: MESSAGE, useValue: 'Cześć'},
             {provide: Greeter, useClass: GreeterBuiltInDeps, deps: [MESSAGE, ElementRef]}
           ])]
@@ -866,7 +866,7 @@ describe('providers', () => {
               textBinding(0, bind(ctx.greeter.greet()));
             }
           },
-          features: [ProvidesFeature([
+          features: [ProvidersFeature([
             {provide: MESSAGE, useValue: 'Cześć'}, {
               provide: Greeter,
               useFactory: (msg: string) => new GreeterDeps(msg),
@@ -910,7 +910,7 @@ describe('providers', () => {
               textBinding(0, bind(ctx.greeter.greet()));
             }
           },
-          features: [ProvidesFeature([
+          features: [ProvidersFeature([
             {provide: MESSAGE, useValue: 'Cześć'}, {
               provide: Greeter,
               useFactory: (msg: string, elementRef: ElementRef) =>
@@ -948,7 +948,7 @@ describe('providers', () => {
             }
           },
           features:
-              [ProvidesFeature([GreeterProvider, {provide: Greeter, useClass: GreeterInj}])]
+              [ProvidersFeature([GreeterProvider, {provide: Greeter, useClass: GreeterInj}])]
         });
       }
 
@@ -966,7 +966,7 @@ describe('providers', () => {
           type: SomeDirective,
           selectors: [['greeter']],
           factory: () => new SomeDirective(),
-          features: [ProvidesFeature([{provide: Greeter, useClass: GreeterES, multi: true}])]
+          features: [ProvidersFeature([{provide: Greeter, useClass: GreeterES, multi: true}])]
         });
       }
 
@@ -992,7 +992,7 @@ describe('providers', () => {
               textBinding(0, bind(ctx.greeter.map(g => g.greet()).join(' - ')));
             }
           },
-          features: [ProvidesFeature(
+          features: [ProvidersFeature(
               [{provide: Greeter, useClass: GreeterDE, multi: true}],
               [{provide: Greeter, useClass: GreeterFR, multi: true}])]
         });
@@ -1016,7 +1016,7 @@ describe('providers', () => {
               element(0, 'greeter');
             }
           },
-          features: [ProvidesFeature([
+          features: [ProvidersFeature([
             {provide: Greeter, useClass: GreeterEN, multi: true},
           ])],
           directives: [GreeterComponent, SomeDirective]
@@ -1080,7 +1080,7 @@ describe('providers', () => {
                 textBinding(0, bind(ctx.greeter.greet()));
               }
             },
-            features: [ProvidesFeature([{provide: Greeter, useClass: GreeterDE}])]
+            features: [ProvidersFeature([{provide: Greeter, useClass: GreeterDE}])]
           });
         }
 
@@ -1111,7 +1111,7 @@ describe('providers', () => {
                 textBinding(0, bind(ctx.greeter.greet()));
               }
             },
-            features: [ProvidesFeature([], [{provide: Greeter, useClass: GreeterDE}])]
+            features: [ProvidersFeature([], [{provide: Greeter, useClass: GreeterDE}])]
           });
         }
 
@@ -1144,7 +1144,7 @@ describe('providers', () => {
                    textBinding(0, bind(ctx.greeter.greet()));
                  }
                },
-               features: [ProvidesFeature(
+               features: [ProvidersFeature(
                    [{provide: Greeter, useClass: GreeterDE}],
                    [{provide: Greeter, useClass: GreeterFR}])]
              });
@@ -1267,7 +1267,7 @@ describe('providers', () => {
                  }
                },
                directives: [ProjectorComponent, GreeterComponent],
-               features: [ProvidesFeature([{provide: Greeter, useClass: GreeterFR}])]
+               features: [ProvidersFeature([{provide: Greeter, useClass: GreeterFR}])]
              });
            }
 
@@ -1299,7 +1299,7 @@ describe('providers', () => {
               }
             },
             directives: [GreeterComponent],
-            features: [ProvidesFeature([{provide: Greeter, useClass: GreeterDE}])]
+            features: [ProvidersFeature([{provide: Greeter, useClass: GreeterDE}])]
           });
         }
 
@@ -1322,7 +1322,7 @@ describe('providers', () => {
               }
             },
             directives: [ProjectorComponent, GreeterComponent],
-            features: [ProvidesFeature([{provide: Greeter, useClass: GreeterFR}])]
+            features: [ProvidersFeature([{provide: Greeter, useClass: GreeterFR}])]
           });
         }
 
@@ -1353,7 +1353,7 @@ describe('providers', () => {
               }
             },
             directives: [GreeterComponent],
-            features: [ProvidesFeature([], [{provide: Greeter, useClass: GreeterES}])]
+            features: [ProvidersFeature([], [{provide: Greeter, useClass: GreeterES}])]
           });
         }
 
@@ -1376,7 +1376,7 @@ describe('providers', () => {
               }
             },
             directives: [ProjectorComponent, GreeterComponent],
-            features: [ProvidesFeature([{provide: Greeter, useClass: GreeterFR}])]
+            features: [ProvidersFeature([{provide: Greeter, useClass: GreeterFR}])]
           });
         }
 
@@ -1408,7 +1408,7 @@ describe('providers', () => {
               }
             },
             directives: [GreeterComponent],
-            features: [ProvidesFeature(
+            features: [ProvidersFeature(
                 [{provide: Greeter, useClass: GreeterDE}],
                 [{provide: Greeter, useClass: GreeterES}])]
           });
@@ -1433,7 +1433,7 @@ describe('providers', () => {
               }
             },
             directives: [ProjectorComponent, GreeterComponent],
-            features: [ProvidesFeature([{provide: Greeter, useClass: GreeterFR}])]
+            features: [ProvidersFeature([{provide: Greeter, useClass: GreeterFR}])]
           });
         }
 
@@ -1458,7 +1458,7 @@ describe('providers', () => {
              type: TraducteurDirective,
              selectors: [['', 'traducteur', '']],
              factory: () => new TraducteurDirective(directiveInject(Greeter as any)),
-             features: [ProvidesFeature([{provide: Greeter, useClass: GreeterFR}])]
+             features: [ProvidersFeature([{provide: Greeter, useClass: GreeterFR}])]
            });
          }
 
@@ -1470,7 +1470,7 @@ describe('providers', () => {
              type: TranslatorDirective,
              selectors: [['', 'translator', '']],
              factory: () => new TranslatorDirective(directiveInject(Greeter as any)),
-             features: [ProvidesFeature([{provide: Greeter, useClass: GreeterDE}])]
+             features: [ProvidersFeature([{provide: Greeter, useClass: GreeterDE}])]
            });
          }
 
@@ -1495,7 +1495,7 @@ describe('providers', () => {
                  textBinding(0, bind(ctx.greeter.greet()));
                }
              },
-             features: [ProvidesFeature([{provide: Greeter, useClass: GreeterEN}])]
+             features: [ProvidersFeature([{provide: Greeter, useClass: GreeterEN}])]
            });
          }
 
@@ -1517,7 +1517,7 @@ describe('providers', () => {
                }
              },
              directives: [TranslatorDirective, TraducteurDirective, GreeterComponent],
-             features: [ProvidesFeature([{provide: Greeter, useClass: GreeterES}])]
+             features: [ProvidersFeature([{provide: Greeter, useClass: GreeterES}])]
            });
          }
 

@@ -318,7 +318,7 @@
     "name": "resetComponentState"
   },
   {
-    "name": "resolveProvidersAndInstantiateDirective"
+    "name": "resolveProvidersAndInstantiateComponent"
   },
   {
     "name": "setHostBindings"

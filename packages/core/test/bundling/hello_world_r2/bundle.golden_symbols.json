@@ -1944,6 +1944,9 @@
     "name": "__extends$u"
   },
   {
+    "name": "__forward_ref__"
+  },
+  {
     "name": "__metadata"
   },
   {

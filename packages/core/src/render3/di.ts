@@ -172,11 +172,11 @@ export function diPublic(def: DirectiveDefInternal<any>): void {
 
 /**
  * Resolves the providers which are defined in the DirectiveDef.
- * 
+ *
  * When inserting the tokens and the records in their respective arrays, we can assume that
  * this method is called first for the component (if any), and then for other directives on the same node.
  * So viewProviders are always resolved first, before all other providers.
- * 
+ *
  * @param def the directive definition
  * @return the updated list of injectables
  */
@@ -184,6 +184,8 @@ let numberOfMultiProviders = 0;
 export function providersResolver<T>(
     def: DirectiveDefInternal<T>, providers: Provider[], viewProviders: Provider[],
     isLast: boolean) {
+  // Because at least one directive has providers, those providers may have `inject` so we need to
+  // redirect it to `directiveInject`
   setInjectImplementation(directiveInject);
 
   const previousOrParentNode = getPreviousOrParentNode();
@@ -191,27 +193,24 @@ export function providersResolver<T>(
   const tView = viewData[TVIEW];
   let injectables = viewData[INJECTABLES];
 
-  if (providers.length > 0 || viewProviders.length > 0) {
-    if (injectables == null) viewData[INJECTABLES] = injectables = [];
-    if (tView.injectables == null) tView.injectables = [];
+  if (injectables == null) viewData[INJECTABLES] = injectables = [];
+  if (tView.injectables == null) tView.injectables = [];
 
-    for (let i = viewProviders.length - 1; i >= 0; i--) {
-      if (resolveProvider(viewProviders[i], tView, injectables)) {
-        // Shift starting index of directives
-        previousOrParentNode.tNode.flags += TNodeFlags.DirectiveIndexShifter;
-        previousOrParentNode.tNode.providerIndexes +=
-            TNodeProviderIndexes.CptViewProvidersCountShifter;
-      }
+  for (let i = viewProviders.length - 1; i >= 0; i--) {
+    if (resolveProvider(viewProviders[i], tView, injectables)) {
+      // Shift starting index of directives
+      previousOrParentNode.tNode.flags += TNodeFlags.DirectiveIndexShifter;
+      previousOrParentNode.tNode.providerIndexes +=
+          TNodeProviderIndexes.CptViewProvidersCountShifter;
     }
+  }
 
-    for (let i = providers.length - 1; i >= 0; i--) {
-      if (resolveProvider(providers[i], tView, injectables)) {
-        // Shift starting index of directives
-        previousOrParentNode.tNode.flags += TNodeFlags.DirectiveIndexShifter;
-        if ((def as ComponentDefInternal<T>).template) {
-          previousOrParentNode.tNode.providerIndexes +=
-              TNodeProviderIndexes.CptProvidersCountShifter;
-        }
+  for (let i = providers.length - 1; i >= 0; i--) {
+    if (resolveProvider(providers[i], tView, injectables)) {
+      // Shift starting index of directives
+      previousOrParentNode.tNode.flags += TNodeFlags.DirectiveIndexShifter;
+      if (isComponentDef(def)) {
+        previousOrParentNode.tNode.providerIndexes += TNodeProviderIndexes.CptProvidersCountShifter;
       }
     }
   }
@@ -219,16 +218,26 @@ export function providersResolver<T>(
   if (isLast) numberOfMultiProviders = 0;
 }
 
+function isComponentDef<T>(def: DirectiveDefInternal<T>): def is ComponentDefInternal<T> {
+  return (def as ComponentDefInternal<T>).template !== null;
+}
+
 /**
  * Resolves a provider and publishes it to the DI system.
- * 
+ *
  * @return true if a factory was created
  */
-function resolveProvider(_provider: Provider, tView: TView, injectables: any[]): boolean {
-  const provider = resolveForwardRef(_provider);
+function resolveProvider(provider: Provider, tView: TView, injectables: any[]): boolean {
+  provider = resolveForwardRef(provider);
+  if (Array.isArray(provider)) {
+    // Recursively call `resolveProvider`
+    // Recursion is OK in this case because this code will not be in hot-path once we implement
+    // cloning of the initial state.
+    throw new Error('missing implementation');
+  }
   let token: any = isTypeProvider(provider) ? provider : resolveForwardRef(provider.provide);
   const factory = providerToFactory(provider);
-  if (provider.multi) {
+  if (!isTypeProvider(provider) && provider.multi) {
     const index = getPreviousOrParentNode().tNode.providerIndexes &
         TNodeProviderIndexes.ProvidersStartIndexMask;
     let existingFactoryIndex = -1;
@@ -237,13 +246,11 @@ function resolveProvider(_provider: Provider, tView: TView, injectables: any[]):
     }
     if (existingFactoryIndex == -1) {
       // Let's create a special factory for that token
-      const multiFactory = createFactory(() => {}, [factory]);
-      multiFactory.factory = () => multiFactory.multi !.map(fn => fn()).reverse();
+      const multiFactory = new Factory(multiFactoryResolver, [factory]);
       tView.injectables !.splice(index, 0, token);
       injectables !.splice(index, 0, multiFactory);
       diPublicInInjector(getOrCreateNodeInjector(), token);
       numberOfMultiProviders++;
-      return true;
     } else {
       // Let's update the existing special factory
       injectables ![existingFactoryIndex].multi.push(factory);
@@ -251,20 +258,26 @@ function resolveProvider(_provider: Provider, tView: TView, injectables: any[]):
     }
   } else {
     tView.injectables !.push(token);
-    injectables.push(createFactory(factory));
+    injectables.push(new Factory(factory));
     diPublicInInjector(getOrCreateNodeInjector(), token);
-    return true;
   }
+  return true;
+}
+
+function multiFactoryResolver(this: Factory): any[] {
+  const factories = this.multi !;
+  const result = [];
+  for (let i = factories.length - 1; 0 <= i; i--) {
+    result.push(factories[i]());
+  }
+  return result;
 }
 
 class Factory {
   /// Marker set to true during factory invocation to see if we get into recursive loop.
   /// Recursive loop causes an error to be displayed.
   resolving = false;
-  constructor(public factory: () => any, public multi: (() => any)[]|undefined) {}
-}
-function createFactory(fn: () => any, multi?: (() => any)[]) {
-  return new Factory(fn, multi);
+  constructor(public factory: (this: Factory) => any, public multi?: (() => any)[]) {}
 }
 const FactoryPrototype = Factory.prototype;
 function isFactory(obj: any): obj is Factory {

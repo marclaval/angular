@@ -8,6 +8,7 @@
 
 import {Type} from '../type';
 import {stringify} from '../util';
+import {getClosureSafeProperty} from '../util/property';
 
 
 
@@ -21,6 +22,8 @@ import {stringify} from '../util';
  * @experimental
  */
 export interface ForwardRefFn { (): any; }
+
+const __forward_ref__ = getClosureSafeProperty({__forward_ref__: getClosureSafeProperty});
 
 /**
  * Allows to refer to references which are not yet defined.
@@ -53,10 +56,10 @@ export function forwardRef(forwardRefFn: ForwardRefFn): Type<any> {
  * @see `forwardRef`
  * @experimental
  */
-export function resolveForwardRef(type: any): any {
-  if (typeof type === 'function' && type.hasOwnProperty('__forward_ref__') &&
-      type.__forward_ref__ === forwardRef) {
-    return (<ForwardRefFn>type)();
+export function resolveForwardRef<T>(type: T): T {
+  if (typeof type === 'function' && type.hasOwnProperty(__forward_ref__) &&
+      (type as any).__forward_ref__ === forwardRef) {
+    return (type as any as ForwardRefFn)();
   } else {
     return type;
   }

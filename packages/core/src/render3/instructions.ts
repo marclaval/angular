@@ -1730,8 +1730,8 @@ function initNodeFlags(index: number) {
 /**
  * Instantiate a directive and resolve its providers.
  */
-export function resolveProvidersAndInstantiateDirective<T>(
-    index: number, directiveDef: DirectiveDefInternal<T>| ComponentDefInternal<T>): T {
+export function resolveProvidersAndInstantiateComponent<T>(
+    index: number, directiveDef: ComponentDefInternal<T>): T {
   initNodeFlags(index);
   if (directiveDef.providersResolver) {
     directiveDef.providersResolver(directiveDef, true);
