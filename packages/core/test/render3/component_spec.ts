@@ -955,6 +955,42 @@ describe('providers', () => {
       const fixture = new ComponentFixture(ComponentWithProviders);
       expect(fixture.html).toEqual('Coucou');
     });
+
+    it('array of providers', () => {
+      @Component({
+        template: '{{greeter.greet()}}',
+        providers: [[
+          {provide: Greeter, useValue: new GreeterES()},
+          {provide: Greeter, useValue: new GreeterDE()}
+        ]],
+      })
+      class ComponentWithProviders {
+        constructor(private greeter: Greeter) {}
+
+        static ngComponentDef = defineComponent({
+          type: ComponentWithProviders,
+          selectors: [['component-with-providers']],
+          factory: () => new ComponentWithProviders(directiveInject(Greeter as any)),
+          consts: 1,
+          vars: 1,
+          template: function(fs: RenderFlags, ctx: ComponentWithProviders) {
+            if (fs & RenderFlags.Create) {
+              text(0);
+            }
+            if (fs & RenderFlags.Update) {
+              textBinding(0, bind(ctx.greeter.greet()));
+            }
+          },
+          features: [ProvidersFeature([[
+            {provide: Greeter, useValue: new GreeterES()},
+            {provide: Greeter, useValue: new GreeterDE()}
+          ]])]
+        });
+      }
+
+      const fixture = new ComponentFixture(ComponentWithProviders);
+      expect(fixture.html).toEqual('Hallo');
+    });
   });
 
   describe('multi', () => {

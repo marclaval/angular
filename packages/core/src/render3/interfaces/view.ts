@@ -379,6 +379,14 @@ export interface TView {
    *
    * The parts of the code which need to go through the list of directives can process the structure
    * from B to B+E.
+   *
+   * Note on multi providers: For such a token,
+   * we create only one special factory per token which returns the array of values.
+   * As the values can be defined in providers and view providers,
+   * the special factories are added at the beginning of the section.
+   * As a side-effect, as in view engine, the array of value returned is always the same.
+   * It doesn't depend on where the values were defined, nor on the location of the node
+   * where the injection happens.
    */
   injectables: InjectableDefList|null;
 
