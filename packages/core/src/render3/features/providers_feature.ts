@@ -39,7 +39,7 @@ import {DirectiveDef} from '../interfaces/definition';
  */
 export function ProvidersFeature<T>(providers: Provider[], viewProviders: Provider[] = []) {
   return (definition: DirectiveDef<T, string>) => {
-    definition.providersResolver = (def: DirectiveDef<T, string>, isLast: boolean) =>
-        providersResolver(def, providers, viewProviders, isLast);
+    definition.providersResolver = (def: DirectiveDef<T, string>) =>
+        providersResolver(def, providers, viewProviders);
   };
 }

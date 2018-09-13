@@ -32,7 +32,7 @@ import {ComponentFactoryResolver} from './component_ref';
 import {getComponentDef, getDirectiveDef, getPipeDef} from './definition';
 import {_getViewData, addToViewTree, assertPreviousIsParent, createEmbeddedViewNode, createLContainer, createLNodeObject, createTNode, getPreviousOrParentNode, getPreviousOrParentTNode, getRenderer, isComponent, renderEmbeddedTemplate, resolveDirective} from './instructions';
 import {VIEWS} from './interfaces/container';
-import {ComponentDefInternal, DirectiveDefInternal, RenderFlags} from './interfaces/definition';
+import {ComponentDefInternal, DirectiveDefInternal, InjectableDefList, RenderFlags} from './interfaces/definition';
 import {LInjector} from './interfaces/injector';
 import {AttributeMarker, LContainerNode, LElementContainerNode, LElementNode, LNode, LNodeWithLocalRefs, LViewNode, TContainerNode, TElementNode, TNodeFlags, TNodeProviderIndexes, TNodeType} from './interfaces/node';
 import {LQueries, QueryReadType} from './interfaces/query';
@@ -181,8 +181,7 @@ export function diPublic(def: DirectiveDefInternal<any>): void {
  * @return the updated list of injectables
  */
 export function providersResolver<T>(
-    def: DirectiveDefInternal<T>, providers: Provider[], viewProviders: Provider[],
-    isLast: boolean) {
+    def: DirectiveDefInternal<T>, providers: Provider[], viewProviders: Provider[]) {
   // Because at least one directive has providers, those providers may have `inject` so we need to
   // redirect it to `directiveInject`
   setInjectImplementation(directiveInject);
@@ -190,30 +189,22 @@ export function providersResolver<T>(
   const previousOrParentTNode = getPreviousOrParentTNode();
   const viewData = _getViewData();
   const tView = viewData[TVIEW];
-  let injectables = viewData[INJECTABLES];
+  const lInjectables = viewData[INJECTABLES] || (viewData[INJECTABLES] = []);
+  const tInjectables: InjectableDefList = tView.injectables || (tView.injectables = []);
 
-  if (injectables == null) viewData[INJECTABLES] = injectables = [];
-  if (tView.injectables == null) tView.injectables = [];
-  let shift = 0;
+  const viewProviderCount = resolveProvider(viewProviders, tInjectables, lInjectables);
+  // Shift starting index of directives
+  previousOrParentTNode.flags += TNodeFlags.DirectiveIndexShifter * viewProviderCount;
+  previousOrParentTNode.providerIndexes +=
+      TNodeProviderIndexes.CptViewProvidersCountShifter * viewProviderCount;
 
-  for (let i = viewProviders.length - 1; i >= 0; i--) {
-    if (shift = resolveProvider(viewProviders[i], tView, injectables)) {
-      // Shift starting index of directives
-      previousOrParentTNode.flags += TNodeFlags.DirectiveIndexShifter * shift;
-      previousOrParentTNode.providerIndexes +=
-          TNodeProviderIndexes.CptViewProvidersCountShifter * shift;
-    }
-  }
 
-  for (let i = providers.length - 1; i >= 0; i--) {
-    if (shift = resolveProvider(providers[i], tView, injectables)) {
-      // Shift starting index of directives
-      previousOrParentTNode.flags += TNodeFlags.DirectiveIndexShifter * shift;
-      if (isComponentDef(def)) {
-        previousOrParentTNode.providerIndexes +=
-            TNodeProviderIndexes.CptProvidersCountShifter * shift;
-      }
-    }
+  const providerCount = resolveProvider(providers, tInjectables, lInjectables);
+  // Shift starting index of directives
+  previousOrParentTNode.flags += TNodeFlags.DirectiveIndexShifter * providerCount;
+  if (isComponentDef(def)) {
+    previousOrParentTNode.providerIndexes +=
+        TNodeProviderIndexes.CptProvidersCountShifter * providerCount;
   }
 }
 
@@ -226,7 +217,8 @@ function isComponentDef<T>(def: DirectiveDefInternal<T>): def is ComponentDefInt
  *
  * @return the number of injectables inserted in the arrays.
  */
-function resolveProvider(provider: Provider, tView: TView, injectables: any[]): number {
+function resolveProvider(
+    provider: Provider, tInjectables: InjectableDefList, lInjectables: any[]): number {
   provider = resolveForwardRef(provider);
   if (Array.isArray(provider)) {
     // Recursively call `resolveProvider`
@@ -234,53 +226,118 @@ function resolveProvider(provider: Provider, tView: TView, injectables: any[]): 
     // cloning of the initial state.
     let shift = 0;
     for (let i = provider.length - 1; i >= 0; i--) {
-      shift += resolveProvider(provider[i], tView, injectables);
+      shift += resolveProvider(provider[i], tInjectables, lInjectables);
     }
     return shift;
   }
   let token: any = isTypeProvider(provider) ? provider : resolveForwardRef(provider.provide);
   const factory = providerToFactory(provider);
   if (!isTypeProvider(provider) && provider.multi) {
+    const previousOrParentTNode = getPreviousOrParentTNode();
     const beginIndex =
-        getPreviousOrParentTNode().providerIndexes & TNodeProviderIndexes.ProvidersStartIndexMask;
-    const endIndex = getPreviousOrParentTNode().flags >> TNodeFlags.DirectiveStartingIndexShift;
-    let existingFactoryIndex = -1;
-    for (let i = 0; i < endIndex && existingFactoryIndex == -1; i++) {
-      if (tView.injectables ![beginIndex + i] === token) existingFactoryIndex = beginIndex + i;
-    }
-    if (existingFactoryIndex == -1) {
-      // Let's create a special factory for that token
-      const multiFactory = new Factory(multiFactoryResolver, [factory]);
-      tView.injectables !.splice(beginIndex, 0, token);
-      injectables !.splice(beginIndex, 0, multiFactory);
+        previousOrParentTNode.providerIndexes & TNodeProviderIndexes.ProvidersStartIndexMask;
+    const endIndex =
+        beginIndex + (previousOrParentTNode.flags >> TNodeFlags.DirectiveStartingIndexShift);
+    let existingProvidesFactoryIndex = indexOf(token, tInjectables, beginIndex, endIndex);
+    // TODO(mlaval): Implement me. This needs to be a number in case af shadowing.
+    // We also need crate both tokens in both places.
+    let existingViewProvidesFactoryIndex = -1;
+    if (existingProvidesFactoryIndex == -1) {
+      // Let's create a special factory for multi token.
+      const multiFactory =
+          new Factory(multiFactoryResolver, [existingViewProvidesFactoryIndex, factory]);
+      // TODO(mlaval): there should bo no splicing.
+      tInjectables.splice(beginIndex, 0, token);
+      lInjectables !.splice(beginIndex, 0, multiFactory);
       diPublicInInjector(getOrCreateNodeInjector(), token);
     } else {
       // Let's update the existing special factory
-      injectables ![existingFactoryIndex].multi.push(factory);
+      lInjectables ![existingProvidesFactoryIndex].multi.push(factory);
       return 0;
     }
   } else {
-    tView.injectables !.push(token);
-    injectables.push(new Factory(factory));
+    tInjectables.push(token);
+    lInjectables.push(new Factory(factory));
     diPublicInInjector(getOrCreateNodeInjector(), token);
   }
   return 1;
 }
 
-function multiFactoryResolver(this: Factory): any[] {
+function indexOf(token: any, tInjectables: InjectableDefList, begin: number, end: number) {
+  let index = -1;
+  for (let i = begin; i < end && index == -1; i++) {
+    if (tInjectables[begin] === token) index = begin;
+  }
+  return index;
+}
+
+function multiFactoryResolver(this: Factory, data: any[]): any[] {
   const factories = this.multi !;
-  const result = [];
-  for (let i = factories.length - 1; 0 <= i; i--) {
-    result.push(factories[i]());
+  const shadowIndex = factories[0];
+  let result: any[];
+  if (shadowIndex !== -1) {
+    let existing = data[shadowIndex];
+    if (isFactory(existing)) {
+      existing = existing.factory(data);
+    }
+    // Copy multi array which we are shadowing.
+    result = (existing as any[]).slice();
+  } else {
+    // We are not shadowing anything
+    result = [];
+  }
+  for (let i = factories.length - 1; 1 <= i; i--) {
+    const factory = factories[i] !as() => null;
+    result.push(factory());
   }
   return result;
 }
 
+interface MultiFactories extends Array<number|null|(() => any)> {
+  [0]: number;
+}
 class Factory {
-  /// Marker set to true during factory invocation to see if we get into recursive loop.
-  /// Recursive loop causes an error to be displayed.
+  /**
+   * Marker set to true during factory invocation to see if we get into recursive loop.
+   * Recursive loop causes an error to be displayed.
+   */
   resolving = false;
-  constructor(public factory: (this: Factory) => any, public multi?: (() => any)[]) {}
+
+  constructor(
+      /**
+       * Factory to invoke in order to create a new instance.
+       */
+      public factory:
+          (this: Factory,
+           /**
+            * array where existing instances of injectables are stored. This is used in case
+            * of multi shadow is needed. See `multi` field documentation.
+            */
+           data: any[]) => any,
+      /**
+       * An array of factories to use in case of `multi` provider.
+       *
+       * Because the same `multi` provider can be declared in `provides` and `viewProvides` it is
+       * possible for `viewProvides` to shadow the `provides`. For this reason the first
+       * item in the array is an index into a shadow instance which needs to be extended.
+       *
+       * Example:
+       *
+       * Given:
+       * ```
+       * provides: [ {provide: String, useValue: 'both', multi: true} ],
+       * viewProvides: [ {provide: String, useValue: 'viewOnly', multi: true} ],
+       * ```
+       *
+       * We have to return `['all']` in case of content injection, but `['all', 'viewOnly']` in case
+       * of view injection. We further have to make sure that the shared instances (in our case
+       * `all`) are the exact same instance in both the content as well as the view injection. (We
+       * have to make sure that we don't double instantiate.) For this reason the `viewProvides`
+       * `Factory` has a pointer to the shadowed `provides` factory so that it can instantiate the
+       * `providers` (`['all']`) and than extend it with `viewProviders` (`['all'] + ['viewOnly'] =
+       * ['all', 'viewOnly']`).
+       */
+      public multi?: MultiFactories) {}
 }
 const FactoryPrototype = Factory.prototype;
 function isFactory(obj: any): obj is Factory {
@@ -564,7 +621,7 @@ export function getOrCreateInjectable<T>(
               throw new Error(`Circular dep for ${stringify(token)}`);
             }
             value.resolving = true;
-            value = injectables[i] = value.factory();
+            value = injectables[i] = value.factory(injectables);
           }
           closestComponentAncestor = null;
           return value;

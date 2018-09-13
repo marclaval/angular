@@ -118,7 +118,7 @@ export interface DirectiveDef<T, Selector extends string> extends BaseDef<T> {
   diPublic: ((def: DirectiveDef<T, string>) => void)|null;
 
   /** Function that resolves providers and publishes them into the DI system. */
-  providersResolver: ((def: DirectiveDef<T, string>, isLast: boolean) => void)|null;
+  providersResolver: ((def: DirectiveDef<T, string>) => void)|null;
 
   /** The selectors that will be used to match nodes to this directive. */
   readonly selectors: CssSelectorList;

@@ -886,7 +886,7 @@ function cacheMatchingDirectivesForNode(
     initNodeFlags(tView.injectables ? tView.injectables.length : 0);
     for (let i = matches.length - 2; i >= 0; i -= 2) {
       const def = matches[i] as DirectiveDefInternal<any>;
-      if (def.providersResolver) def.providersResolver(def, i == 0);
+      if (def.providersResolver) def.providersResolver(def);
     }
     injectables = viewData[INJECTABLES];
     for (let i = 0; i < matches.length; i += 2) {
@@ -1734,7 +1734,7 @@ export function resolveProvidersAndInstantiateComponent<T>(
     index: number, directiveDef: ComponentDefInternal<T>): T {
   initNodeFlags(index);
   if (directiveDef.providersResolver) {
-    directiveDef.providersResolver(directiveDef, true);
+    directiveDef.providersResolver(directiveDef);
     injectables = viewData[INJECTABLES];
   }
   return directiveDef.factory() as T;
