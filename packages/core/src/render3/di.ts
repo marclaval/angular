@@ -185,24 +185,25 @@ export function providersResolver<T>(
   // Because at least one directive has providers, those providers may have `inject` so we need to
   // redirect it to `directiveInject`
   setInjectImplementation(directiveInject);
-
+      debugger;
   const previousOrParentTNode = getPreviousOrParentTNode();
   const viewData = _getViewData();
   const tView = viewData[TVIEW];
   const lInjectables = viewData[INJECTABLES] || (viewData[INJECTABLES] = []);
   const tInjectables: InjectableDefList = tView.injectables || (tView.injectables = []);
+  const isComponent = isComponentDef(def);
 
-  const viewProviderCount = resolveProvider(viewProviders, tInjectables, lInjectables);
+  const viewProviderCount = resolveProvider(viewProviders, tInjectables, lInjectables, isComponent, true);
   // Shift starting index of directives
   previousOrParentTNode.flags += TNodeFlags.DirectiveIndexShifter * viewProviderCount;
   previousOrParentTNode.providerIndexes +=
       TNodeProviderIndexes.CptViewProvidersCountShifter * viewProviderCount;
 
 
-  const providerCount = resolveProvider(providers, tInjectables, lInjectables);
+  const providerCount = resolveProvider(providers, tInjectables, lInjectables, isComponent, false);
   // Shift starting index of directives
   previousOrParentTNode.flags += TNodeFlags.DirectiveIndexShifter * providerCount;
-  if (isComponentDef(def)) {
+  if (isComponent) {
     previousOrParentTNode.providerIndexes +=
         TNodeProviderIndexes.CptProvidersCountShifter * providerCount;
   }
@@ -218,15 +219,28 @@ function isComponentDef<T>(def: DirectiveDefInternal<T>): def is ComponentDefInt
  * @return the number of injectables inserted in the arrays.
  */
 function resolveProvider(
-    provider: Provider, tInjectables: InjectableDefList, lInjectables: any[]): number {
+    provider: Provider, tInjectables: InjectableDefList, lInjectables: any[], isComponent: boolean, isViewProvider: boolean, toBeMoved? : {index:number, shadower: number}[]): number {
   provider = resolveForwardRef(provider);
   if (Array.isArray(provider)) {
     // Recursively call `resolveProvider`
     // Recursion is OK in this case because this code will not be in hot-path once we implement
     // cloning of the initial state.
+    const isRoot = toBeMoved == null;
+    if (!toBeMoved && isViewProvider) toBeMoved = [];
     let shift = 0;
     for (let i = provider.length - 1; i >= 0; i--) {
-      shift += resolveProvider(provider[i], tInjectables, lInjectables);
+      shift += resolveProvider(provider[i], tInjectables, lInjectables, isComponent, isViewProvider, toBeMoved);
+    }
+    // Move multi providers 
+    if (isRoot && toBeMoved && toBeMoved.length > 0) {
+      toBeMoved.sort((a, b) =>  a.index - b.index);
+      for (let i = 0; i < toBeMoved.length; i++) {
+        const item = toBeMoved[i];
+        tInjectables.push(tInjectables.splice(item.index, 1)[0]);
+        lInjectables.push(lInjectables.splice(item.index, 1)[0]);
+        lInjectables[item.shadower - i].multi[0] = lInjectables.length - 1 - (toBeMoved.length - i - 1);
+        getPreviousOrParentTNode().providerIndexes += TNodeProviderIndexes.CptProvidersCountShifter;
+      }
     }
     return shift;
   }
@@ -236,24 +250,51 @@ function resolveProvider(
     const previousOrParentTNode = getPreviousOrParentTNode();
     const beginIndex =
         previousOrParentTNode.providerIndexes & TNodeProviderIndexes.ProvidersStartIndexMask;
-    const endIndex =
-        beginIndex + (previousOrParentTNode.flags >> TNodeFlags.DirectiveStartingIndexShift);
-    let existingProvidesFactoryIndex = indexOf(token, tInjectables, beginIndex, endIndex);
-    // TODO(mlaval): Implement me. This needs to be a number in case af shadowing.
-    // We also need crate both tokens in both places.
-    let existingViewProvidesFactoryIndex = -1;
-    if (existingProvidesFactoryIndex == -1) {
+    const endIndex = previousOrParentTNode.flags >> TNodeFlags.DirectiveStartingIndexShift;
+    let existingProvidersFactoryIndex = indexOf(token, tInjectables, beginIndex, endIndex);
+    if (existingProvidersFactoryIndex == -1) {
       // Let's create a special factory for multi token.
       const multiFactory =
-          new Factory(multiFactoryResolver, [existingViewProvidesFactoryIndex, factory]);
-      // TODO(mlaval): there should bo no splicing.
-      tInjectables.splice(beginIndex, 0, token);
-      lInjectables !.splice(beginIndex, 0, multiFactory);
+          new Factory(multiFactoryResolver, [-1, factory]);
+      tInjectables.push(token);
+      lInjectables.push(multiFactory);
       diPublicInInjector(getOrCreateNodeInjector(), token);
     } else {
-      // Let's update the existing special factory
-      lInjectables ![existingProvidesFactoryIndex].multi.push(factory);
-      return 0;
+      // A special factory already exists at existingProvidersFactoryIndex
+      // 3 cases:
+      const cptProvidersCount = previousOrParentTNode.providerIndexes >> TNodeProviderIndexes.CptProvidersCountShift;
+      const cptViewProvidersCount =
+          (previousOrParentTNode.providerIndexes & TNodeProviderIndexes.CptViewProvidersCountMask) >>
+          TNodeProviderIndexes.CptViewProvidersCountShift;
+      const isExistingFromComponent = existingProvidersFactoryIndex >= endIndex - cptProvidersCount - cptViewProvidersCount;
+      const isExistingFromComponentProviders = existingProvidersFactoryIndex >= endIndex - cptProvidersCount ;
+      // 1) Same zone
+      if (!isComponent ||
+        isViewProvider && isExistingFromComponent && !isExistingFromComponentProviders||
+        isComponent && !isViewProvider && isExistingFromComponentProviders ||
+        isComponent && !isViewProvider && !isExistingFromComponent) {
+        // Let's simply update the existing special factory
+        lInjectables ![existingProvidersFactoryIndex].multi.push(factory);
+        return 0;
+      // 2) The provider is a view provider and the existing factory was created by a provider from a directive
+      } else if (isViewProvider && !isExistingFromComponent) {
+        const multiFactory =
+          new Factory(multiFactoryResolver, [-1, factory]);
+        toBeMoved !.push({index: existingProvidersFactoryIndex, shadower: tInjectables.length});
+        tInjectables.push(token);
+        lInjectables.push(multiFactory);
+        return 1;
+      // 3) The provider is a provider from the component and the existing factory was created by a view provider
+      } else if (isComponent && !isViewProvider && isExistingFromComponent && !isExistingFromComponentProviders) {
+        const multiFactory =
+          new Factory(multiFactoryResolver, [-1, factory]);
+        lInjectables[existingProvidersFactoryIndex].multi[0] = tInjectables.length;
+        tInjectables.push(token);
+        lInjectables.push(multiFactory);
+        return 1;
+      } else {
+        if (ngDevMode) throw new Error('This code should be unreachable');
+      }
     }
   } else {
     tInjectables.push(token);
@@ -265,8 +306,8 @@ function resolveProvider(
 
 function indexOf(token: any, tInjectables: InjectableDefList, begin: number, end: number) {
   let index = -1;
-  for (let i = begin; i < end && index == -1; i++) {
-    if (tInjectables[begin] === token) index = begin;
+  for (let i = end - 1; i >= begin && index == -1; i--) {
+    if (tInjectables[i] === token) index = i;
   }
   return index;
 }
@@ -561,6 +602,7 @@ export function getOrCreateInjectable<T>(
   // If the token has a bloom hash, then it is a directive that is public to the injection system
   // (diPublic) otherwise fall back to the module injector.
   if (bloomHash !== null) {
+    debugger;
     let injector: LInjector|null = nodeInjector;
     closestComponentAncestor = injector.node.tNode.flags & TNodeFlags.isComponent ?
         injector.node as LElementNode :
@@ -594,7 +636,7 @@ export function getOrCreateInjectable<T>(
       // On top, we use getClosestComponentAncestorWithInjector()
       // to climb the node tree, staying on the view side by jumping from root nodes to root nodes.
       // When the 2 climbs intersect, it means that view providers apply.
-      if (node === closestComponentAncestor || closestComponentAncestor == null) {
+      if (node === closestComponentAncestor || node.view[HOST_NODE] == null) {
         canAccessViewProviders = true;
         const nextHost = injector.node.view[HOST_NODE];
         closestComponentAncestor =
