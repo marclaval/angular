@@ -354,8 +354,8 @@ export interface TView {
    * Provider tokens and directive defs that have already been matched to nodes on
    * this view.
    *
-   * Tokens and defs are stored at the same index in TView.directives[] as their instances
-   * are stored in LView.directives[]. This simplifies lookup in DI.
+   * Tokens and defs are stored at the same index in TView.injectables[] as their instances
+   * are stored in LViewData[INJECTABLES]. This simplifies lookup in DI.
    *
    * For each node of the view, this array has a section whose structure is:
    * [---- providers ----|-- viewProviders --|--- providers of -----|-- directives --]

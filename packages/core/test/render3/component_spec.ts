@@ -7,6 +7,7 @@
  */
 
 import {Component, Directive, ElementRef, Injectable, InjectionToken, ViewEncapsulation, createInjector, defineInjectable, defineInjector, inject} from '../../src/core';
+import {forwardRef} from '../../src/di/forward_ref';
 import {injectInjectorOnly, setInjectImplementation} from '../../src/di/injector';
 import {getRenderedText} from '../../src/render3/component';
 
@@ -1947,4 +1948,104 @@ describe('providers', () => {
     });
   });
 
+  it('should support forwardRef', () => {
+    @Component({
+      template: 'foo',
+      providers: [forwardRef(() => ComponentWithProviders)],
+    })
+    class ComponentWithProviders {
+      constructor(public forLater: ForLater) {}
+
+      static ngComponentDef = defineComponent({
+        type: ComponentWithProviders,
+        selectors: [['component-with-providers']],
+        factory: () => new ComponentWithProviders(directiveInject(ForLater)),
+        consts: 1,
+        vars: 1,
+        template: function(fs: RenderFlags, ctx: ForLater) {
+          if (fs & RenderFlags.Create) {
+            text(0, 'foo');
+          }
+        },
+        features: [ProvidersFeature([forwardRef(() => ForLater)])]
+      });
+    }
+
+    class ForLater {}
+
+    const fixture = new ComponentFixture(ComponentWithProviders);
+    expect(fixture.component.forLater instanceof ForLater).toBeTruthy();
+  });
+
+  it('should support embedded views', () => {
+    @Component({
+      template: '{{greeter.greet()}}',
+    })
+    class Repeated {
+      constructor(private greeter: Greeter) {}
+
+      static ngComponentDef = defineComponent({
+        type: Repeated,
+        selectors: [['repeated']],
+        factory: () => new Repeated(directiveInject(Greeter as any)),
+        consts: 1,
+        vars: 1,
+        template: function(fs: RenderFlags, ctx: Repeated) {
+          if (fs & RenderFlags.Create) {
+            text(0);
+          }
+          if (fs & RenderFlags.Update) {
+            textBinding(0, bind(ctx.greeter.greet));
+          }
+        }
+      });
+    }
+
+    @Component({
+      template: `<div>
+          % for (let i = 0; i < 3; i++) {
+            <repeated></repeated>
+          % }
+        </div>`,
+      viewProviders: [{provide: Greeter, useValue: {greet: 'Salut'}}],
+    })
+    class ComponentWithProviders {
+      static ngComponentDef = defineComponent({
+        type: ComponentWithProviders,
+        selectors: [['component-with-providers']],
+        factory: () => new ComponentWithProviders(),
+        consts: 2,
+        vars: 0,
+        template: function(fs: RenderFlags, ctx: ComponentWithProviders) {
+          if (fs & RenderFlags.Create) {
+            elementStart(0, 'div');
+            { container(1); }
+            elementEnd();
+          }
+          if (fs & RenderFlags.Update) {
+            containerRefreshStart(1);
+            {
+              for (let i = 0; i < 3; i++) {
+                let rf1 = embeddedViewStart(1, 2, 1);
+                {
+                  if (rf1 & RenderFlags.Create) {
+                    element(0, 'repeated');
+                  }
+                }
+                embeddedViewEnd();
+              }
+            }
+            containerRefreshEnd();
+          }
+        },
+        features: [ProvidersFeature([], [{provide: Greeter, useValue: {greet: 'Salut'}}])],
+        directives: [Repeated]
+      });
+    }
+
+    const fixture = new ComponentFixture(ComponentWithProviders);
+    expect(fixture.html)
+        .toEqual(
+            '<div><repeated>Salut</repeated><repeated>Salut</repeated><repeated>Salut</repeated></div>');
+  });
 });

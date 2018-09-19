@@ -37,7 +37,7 @@ import {LInjector} from './interfaces/injector';
 import {AttributeMarker, LContainerNode, LElementContainerNode, LElementNode, LNode, TContainerNode, TElementContainerNode, TElementNode, TNode, TNodeFlags, TNodeProviderIndexes, TNodeType, TViewNode} from './interfaces/node';
 import {LQueries, QueryReadType} from './interfaces/query';
 import {Renderer3, isProceduralRenderer} from './interfaces/renderer';
-import {CONTEXT, INJECTABLES, HOST_NODE, INJECTOR, LViewData, QUERIES, RENDERER, TVIEW, TView} from './interfaces/view';
+import {CONTEXT, HOST_NODE, INJECTABLES, INJECTOR, LViewData, PARENT, QUERIES, RENDERER, TVIEW, TView} from './interfaces/view';
 import {assertNodeOfPossibleTypes, assertNodeType} from './node_assert';
 import {addRemoveViewFromContainer, appendChild, detachView, findComponentView, getBeforeNodeForView, getHostElementNode, getParentLNode, getParentOrContainerNode, getRenderParent, insertView, removeView} from './node_manipulation';
 import {getLNode, isComponent} from './util';
@@ -206,7 +206,6 @@ export function providersResolver<T>(
   const lInjectables = viewData[INJECTABLES] || (viewData[INJECTABLES] = []);
   const tInjectables: InjectableDefList = tView.injectables || (tView.injectables = []);
   const isComponent = isComponentDef(def);
-
   // The list of providers is processed first, and the flags are updated
   const providerCount = resolveProvider(providers, tInjectables, lInjectables, isComponent, false);
   previousOrParentTNode.flags += TNodeFlags.DirectiveIndexShifter * providerCount;
@@ -692,19 +691,6 @@ function getOrCreateRenderer2(di: LInjector): Renderer2 {
 }
 
 /**
- * Same as getClosestComponentAncestor(), but with the extra condition that the ancestor returned
- * must have a node injector.
- */
-function getClosestComponentAncestorWithInjector(ode: LNode): LElementNode {
-  let hostNode = getHostElementNode(node.view);
-  const hostTNode = node.view[HOST_NODE] as TNode;
-  while (hostNode && (hostTNode.type === TNodeType.View || !hostNode.nodeInjector)) {
-    hostNode = getHostElementNode(hostNode.view);
-  }
-  return hostNode as LElementNode;
-}
-
-/**
  * Returns the value associated to the given token from the injectors.
  *
  * Look for the injector providing the token by walking up the node injector tree and then
@@ -715,7 +701,6 @@ function getClosestComponentAncestorWithInjector(ode: LNode): LElementNode {
  * @param flags Injection flags
  * @returns the value from the injector or `null` when not found
  */
-let closestComponentAncestor: LElementNode|null;
 export function getOrCreateInjectable<T>(
     nodeInjector: LInjector, token: Type<T>| InjectionToken<T>,
     flags: InjectFlags = InjectFlags.Default): T|null {
@@ -724,10 +709,7 @@ export function getOrCreateInjectable<T>(
   // (diPublic) otherwise fall back to the module injector.
   if (bloomHash !== null) {
     let injector: LInjector|null = nodeInjector;
-    closestComponentAncestor = injector.tNode.flags & TNodeFlags.isComponent ?
-        injector.node as LElementNode :
-        getClosestComponentAncestorWithInjector(injector.node);
-
+    const initialComponentView = findComponentView(injector.view);
     while (injector) {
       // Get the closest potential matching injector (upwards in the injector tree) that
       // *potentially* has the token.
@@ -744,27 +726,15 @@ export function getOrCreateInjectable<T>(
       // instance.
       const tNode = injector.tNode;
       const injectorView = injector.view;
-      const node = getLNode(tNode, injectorView);
       const nodeFlags = tNode.flags;
       const nodeProviderIndexes = tNode.providerIndexes;
       const tInjectables = injectorView[TVIEW].injectables !;
       // First, we step through providers
-      let canAccessViewProviders = false;
-      // We need to determine if view providers can be accessed by the starting node (i.e.
-      // nodeInjector.node).
-      // In other word, we need to know if nodeInjector.node belongs to the view of the current
-      // injector.node.
-      // In this while loop, we climb the node injector tree up.
-      // On top, we use getClosestComponentAncestorWithInjector()
-      // to climb the node tree, staying on the view side by jumping from root nodes to root nodes.
-      // When the 2 climbs intersect, it means that view providers apply.
-      if (node === closestComponentAncestor || injectorView[HOST_NODE] == null) {
-        canAccessViewProviders = true;
-        const nextHost = getHostElementNode(injectorView);
-        closestComponentAncestor =
-            nextHost ? getClosestComponentAncestorWithInjector(nextHost) : null;
-      }
-
+      // A node can access view providers on a given element injector if:
+      // - they don't belong to the same "component view"
+      // - or the node belong to the root "component view"
+      const canAccessViewProviders = findComponentView(injector.view) !== initialComponentView ||
+          initialComponentView[HOST_NODE] == null;
       const startInjectables = nodeProviderIndexes & TNodeProviderIndexes.ProvidersStartIndexMask;
       const startDirectives = nodeFlags >> TNodeFlags.DirectiveStartingIndexShift;
       const cptProvidersCount = nodeProviderIndexes >> TNodeProviderIndexes.CptProvidersCountShift;
@@ -779,11 +749,9 @@ export function getOrCreateInjectable<T>(
         if (token === providerToken &&
             (!isViewProvider || isViewProvider && canAccessViewProviders)) {
           const value = getInjectable(tInjectables, lInjectables, i);
-          closestComponentAncestor = null;
           return value;
         }
       }
-      closestComponentAncestor = null;
 
       // Then, we step through directives
       const count = nodeFlags & TNodeFlags.DirectiveCountMask;
@@ -921,9 +889,6 @@ export function bloomFindPossibleInjector(
     // If the ancestor bloom filter value has the bit corresponding to the directive, traverse up to
     // find the specific injector. If the ancestor bloom filter does not have the bit, we can abort.
     if (value & mask) {
-      if (injector.node === closestComponentAncestor) {
-        closestComponentAncestor = getClosestComponentAncestorWithInjector(injector.node);
-      }
       injector = injector.parent;
     } else {
       return null;
