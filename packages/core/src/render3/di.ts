@@ -247,10 +247,10 @@ function resolveProvider(
     return shift;
   }
   let token: any = isTypeProvider(provider) ? provider : resolveForwardRef(provider.provide);
-  let factory: Factory|(() => any) = providerToFactory(provider);
+  let factory: NodeInjectorFactory|(() => any) = providerToFactory(provider);
   if (isTypeProvider(provider) || !provider.multi) {
     // Single provider case: the factory is created and pushed immediately
-    factory = new Factory(factory);
+    factory = new NodeInjectorFactory(factory, isViewProvider);
   } else {
     // Multi provider case:
     // We create a special multi factory which is going to aggregate all the values.
@@ -292,6 +292,7 @@ function resolveProvider(
       factory = multiFactory(
           isViewProvider ? multiViewProvidersFactoryResolver : multiProvidersFactoryResolver,
           !isComponent && doesViewProvidersFactoryExist ? endIndex : lInjectables.length,
+          isViewProvider,
           !doesProvidersFactoryExist ? null : lInjectables[existingProvidersFactoryIndex], factory);
       if (!isComponent && doesViewProvidersFactoryExist) {
         // Special insertion logic for case 3.a.i
@@ -320,7 +321,7 @@ function resolveProvider(
 /**
  * Add a factory in a nulti factory.
  */
-function multiFactoryAdd(multiFactory: Factory, factory: () => any): void {
+function multiFactoryAdd(multiFactory: NodeInjectorFactory, factory: () => any): void {
   multiFactory.multi !.push(factory);
 }
 
@@ -337,7 +338,8 @@ function indexOf(item: any, arr: any[], begin: number, end: number) {
 /**
  * Use this with `multi` `providers`.
  */
-function multiProvidersFactoryResolver(this: Factory, tData: any[], data: any[]): any[] {
+function multiProvidersFactoryResolver(
+    this: NodeInjectorFactory, tData: any[], data: any[]): any[] {
   return multiResolve(this.multi !, []);
 }
 
@@ -346,10 +348,11 @@ function multiProvidersFactoryResolver(this: Factory, tData: any[], data: any[])
  *
  * This factory knows how to concatenate itself with the existing `multi` `providers`.
  */
-function multiViewProvidersFactoryResolver(this: Factory, tData: any[], lData: any[]): any[] {
+function multiViewProvidersFactoryResolver(
+    this: NodeInjectorFactory, tData: any[], lData: any[]): any[] {
   const factories = this.multi !;
   const componentCount = this.componentProviders !;
-  const multiProviders = getInjectable(tData, lData, this.providerFactory !.index !);
+  const multiProviders = getNodeInjectable(tData, lData, this.providerFactory !.index !);
   // Copy the section of the array which contains `multi` `providers` from the component
   let result: any[] = multiProviders.slice(0, componentCount);
   // Insert the `viewProvider` instances.
@@ -380,18 +383,22 @@ function multiResolve(factories: Array<() => any>, result: any[]): any[] {
  * cached `injectable`. Otherwise if it detects that the value is still a factory it
  * instantiate the `injectable` and caches the value.
  */
-function getInjectable(tData: any[], lData: any[], index: number): any {
+function getNodeInjectable(tData: any[], lData: any[], index: number): any {
   let value = lData[index];
   if (isFactory(value)) {
     if (value.resolving) {
       throw new Error(`Circular dep for ${stringify(tData[index])}`);
     }
+    const previousIncludeViewProviders = includeViewProviders;
+    includeViewProviders = value.isViewProvider;
     value.resolving = true;
     try {
       value = lData[index] = value.factory(tData, lData);
     } catch (e) {
       value.resolving = false;
       throw e;
+    } finally {
+      includeViewProviders = previousIncludeViewProviders;
     }
   }
   return value;
@@ -401,9 +408,10 @@ function getInjectable(tData: any[], lData: any[], index: number): any {
  * Creates a muli factory.
  */
 function multiFactory(
-    factoryFn: (this: Factory, tData: any[], lData: any[]) => any, index: number,
-    providerFactory: Factory | null, f: () => any): Factory {
-  const factory = new Factory(factoryFn);
+    factoryFn: (this: NodeInjectorFactory, tData: any[], lData: any[]) => any, index: number,
+    isViewProvider: boolean, providerFactory: NodeInjectorFactory | null,
+    f: () => any): NodeInjectorFactory {
+  const factory = new NodeInjectorFactory(factoryFn, isViewProvider);
   factory.multi = [];
   factory.index = index;
   factory.componentProviders = providerFactory ? providerFactory.multi !.length : 0;
@@ -427,12 +435,17 @@ function multiFactory(
  * - `providers` factory: `componentCount` is a number and `index = -1`.
  * - `viewProviders` factory: `componentCount` is a number and `index` points to `providers`.
  */
-class Factory {
+class NodeInjectorFactory {
   /**
    * Marker set to true during factory invocation to see if we get into recursive loop.
    * Recursive loop causes an error to be displayed.
    */
   resolving = false;
+
+  /**
+   * Marks that the token can see other Tokens declared on `viewProviders`.
+   */
+  isViewProvider: boolean;
 
   /**
    * An array of factories to use in case of `multi` provider.
@@ -497,7 +510,7 @@ class Factory {
    * `providers` (`['all']`) and than extend it with `viewProviders` (`['all'] + ['viewOnly'] =
    * ['all', 'viewOnly']`).
    */
-  providerFactory?: Factory|null;
+  providerFactory?: NodeInjectorFactory|null;
 
 
   constructor(
@@ -505,7 +518,7 @@ class Factory {
        * Factory to invoke in order to create a new instance.
        */
       public factory:
-          (this: Factory,
+          (this: NodeInjectorFactory,
            /**
             * array where injectables tokens are stored. This is used in
             * case of an error reporting to produce friendlier errors.
@@ -515,10 +528,16 @@ class Factory {
             * array where existing instances of injectables are stored. This is used in case
             * of multi shadow is needed. See `multi` field documentation.
             */
-           lData: any[]) => any) {}
+           lData: any[]) => any,
+      /**
+       * Set to `true` if the token is declared in `viewProviders` (or if it is component).
+       */
+      isViewProvider: boolean) {
+    this.isViewProvider = isViewProvider;
+  }
 }
-const FactoryPrototype = Factory.prototype;
-function isFactory(obj: any): obj is Factory {
+const FactoryPrototype = NodeInjectorFactory.prototype;
+function isFactory(obj: any): obj is NodeInjectorFactory {
   // See: https://jsperf.com/instanceof-vs-getprototypeof
   return typeof obj == 'object' && Object.getPrototypeOf(obj) == FactoryPrototype;
 }
@@ -691,6 +710,96 @@ function getOrCreateRenderer2(di: LInjector): Renderer2 {
 }
 
 /**
+ * Determines if the `tView` is a root view of a component (vs an embedded-view).
+ *
+ * @param tView `TView` to examine.
+ */
+function isTViewAComponentView(tView: TView): boolean {
+  // TODO(misko): Refactor `TView` for performance so that it has `flags` so that we can directly
+  // determine if it is a ComponentView (vs EmbeddedView) without looking at `TNode`;
+  return tView.node !.type == TNodeType.Element;
+}
+
+/**
+ * Determines if a given location in a `TNode` tree should include the `viewProviders`.
+ *
+ * When an injector is searching for a type in a `TNode` tree, it needs to determine if a given
+ * `TNode` should have `viewProviders` visible. The basic rules which make the `viewProviders`
+ * visible are:
+ * - If `instantiatingComponent` component is true. This is a special case
+ *
+ * @param currentTNode Current `TNode` where we are looking for the injectable.
+ * @param previousTNode Previous `TNode` where we looked for injectable (or `null` if it is at the
+ * beginning of search.)
+ * @param invokedFromComponent True if we are trying to resolved tokens for `Component`. This is
+ * because `Component` can see into the `viewProviders`.
+ */
+function areViewProvidersVisible(
+    currentTView: TView, previousTView: TView | null, invokedFromComponent: boolean): boolean {
+  if (previousTView === null) {
+    // This only happens on the initial `NodeInjector` query before we start walking up the tree.
+    if (invokedFromComponent) {
+      // If we are instantiating a token which is needed form `Component` than we have to make
+      // `viewProviders` visible to the `Component`.
+      return true;
+    } else {
+      // The token was declared in `providers` and therefore should not see `viewProviders`.
+      return false;
+    }
+  } else {
+    // Check to see if `TView` transition has occurred, which means that `currentTNode` is a
+    // component.
+    if (currentTView !== previousTView && isTViewAComponentView(previousTView)) {
+      // `TView` transition has occurred therefor if we have just crossed from a component view into
+      // parent than the `viewProviders` should be included.
+      return true;
+    } else {
+      // `TView` transition has not occurred therefor we know that `viewProviders` should not be
+      // visible.
+      return false;
+    }
+  }
+}
+
+/**
+ * Defines if the call to `inject` should include `viewProviders` in its resolution.
+ *
+ * This is set to true when we try to instantiate a component. This value is reset in
+ * `getNodeInjectable` to value which matches the declaration location of the token about to be
+ * instantiated. This is done so that if we are injecting a token which was declared outside of
+ * `viewProviders` we don't accidentally pull `viewProviders` in.
+ *
+ * Example:
+ *
+ * ```
+ * @Injectable()
+ * class Service {
+ *   constructor(public value: String) {}
+ * }
+ *
+ * @Component({
+ *   providers: [
+ *     MyService,
+ *     {provide: String, value: 'providers' }
+ *   ]
+ *   viewProviders: [
+ *     {provide: String, value: 'viewProviders'}
+ *   ]
+ * })
+ * class MyComponent {
+ *   constructor(myService: MyService, value: String) {
+ *     // We expect that Component can see into `viewProviders`.
+ *     expect(value).toEqual('viewProviders');
+ *     // `MyService` was not declared in `viewProviders` hence it can't see it.
+ *     expect(myService.value).toEqual('providers');
+ *   }
+ * }
+ *
+ * ```
+ */
+let includeViewProviders = false;
+
+/**
  * Returns the value associated to the given token from the injectors.
  *
  * Look for the injector providing the token by walking up the node injector tree and then
@@ -709,11 +818,11 @@ export function getOrCreateInjectable<T>(
   // (diPublic) otherwise fall back to the module injector.
   if (bloomHash !== null) {
     let injector: LInjector|null = nodeInjector;
-    const initialComponentView = findComponentView(injector.view);
+    let previousTView: TView|null = null;
     while (injector) {
       // Get the closest potential matching injector (upwards in the injector tree) that
       // *potentially* has the token.
-      injector = bloomFindPossibleInjector(injector !, bloomHash, flags);
+      injector = bloomFindPossibleInjector(injector, bloomHash, flags);
 
       // If no injector is found, we *know* that there is no ancestor injector that contains the
       // token, so we abort.
@@ -724,17 +833,18 @@ export function getOrCreateInjectable<T>(
       // At this point, we have an injector which *may* contain the token, so we step through the
       // providers and directives associated with the injector's corresponding node to get the
       // instance.
-      const tNode = injector.tNode;
+      const currentTNode = injector.tNode;
       const injectorView = injector.view;
-      const nodeFlags = tNode.flags;
-      const nodeProviderIndexes = tNode.providerIndexes;
-      const tInjectables = injectorView[TVIEW].injectables !;
+      const currentTView = injectorView[TVIEW];
+      const nodeFlags = currentTNode.flags;
+      const nodeProviderIndexes = currentTNode.providerIndexes;
+      const tInjectables = currentTView.injectables !;
       // First, we step through providers
       // A node can access view providers on a given element injector if:
       // - they don't belong to the same "component view"
       // - or the node belong to the root "component view"
-      const canAccessViewProviders = findComponentView(injector.view) !== initialComponentView ||
-          initialComponentView[HOST_NODE] == null;
+      const canAccessViewProviders =
+          areViewProvidersVisible(currentTView, previousTView, includeViewProviders);
       const startInjectables = nodeProviderIndexes & TNodeProviderIndexes.ProvidersStartIndexMask;
       const startDirectives = nodeFlags >> TNodeFlags.DirectiveStartingIndexShift;
       const cptProvidersCount = nodeProviderIndexes >> TNodeProviderIndexes.CptProvidersCountShift;
@@ -748,7 +858,7 @@ export function getOrCreateInjectable<T>(
         const providerToken = tInjectables[i] as InjectionToken<any>| Type<any>;
         if (token === providerToken &&
             (!isViewProvider || isViewProvider && canAccessViewProviders)) {
-          const value = getInjectable(tInjectables, lInjectables, i);
+          const value = getNodeInjectable(tInjectables, lInjectables, i);
           return value;
         }
       }
@@ -781,6 +891,7 @@ export function getOrCreateInjectable<T>(
       } else {
         injector = injector.parent;
       }
+      previousTView = currentTView;
     }
   }
 

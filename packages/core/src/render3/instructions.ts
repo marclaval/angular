@@ -23,7 +23,7 @@ import {AttributeMarker, InitialInputData, InitialInputs, LContainerNode, LEleme
 import {CssSelectorList, NG_PROJECT_AS_ATTR_NAME} from './interfaces/projection';
 import {LQueries} from './interfaces/query';
 import {ProceduralRenderer3, RComment, RElement, RNode, RText, Renderer3, RendererFactory3, isProceduralRenderer} from './interfaces/renderer';
-import {BINDING_INDEX, CLEANUP, CONTAINER_INDEX, CONTENT_QUERIES, CONTEXT, CurrentMatchesList, DECLARATION_VIEW, INJECTABLES, FLAGS, HEADER_OFFSET, HOST_NODE, INJECTOR, LViewData, LViewFlags, NEXT, OpaqueViewState, PARENT, QUERIES, RENDERER, RootContext, SANITIZER, TAIL, TVIEW, TView} from './interfaces/view';
+import {BINDING_INDEX, CLEANUP, CONTAINER_INDEX, CONTENT_QUERIES, CONTEXT, CurrentMatchesList, DECLARATION_VIEW, FLAGS, HEADER_OFFSET, HOST_NODE, INJECTABLES, INJECTOR, LViewData, LViewFlags, NEXT, OpaqueViewState, PARENT, QUERIES, RENDERER, RootContext, SANITIZER, TAIL, TVIEW, TView} from './interfaces/view';
 import {assertNodeOfPossibleTypes, assertNodeType} from './node_assert';
 import {appendChild, appendProjectedNode, createTextNode, findComponentView, getContainerNode, getHostElementNode, getLViewChild, getParentOrContainerNode, getRenderParent, insertView, removeView} from './node_manipulation';
 import {isNodeMatchingSelectorList, matchingSelectorIndex} from './node_selector_matcher';
@@ -815,6 +815,16 @@ export function elementStart(
     setUpAttributes(native, attrs);
   }
   appendChild(native, tNode, viewData);
+  // TODO(mlaval): We need to change the way directives/components are instantiated to use
+  // `NodeInjectorFactory` and than instantiate it with `getNodeInjectable` eagerly. We also have to
+  // make sure that when `NodeInjectorFactory` is created for component we pass in `true` for
+  // `viewProviders` visibility. Calling `getNodeInjectable` will than correctly set the
+  // `includeViewProviders` for the component.
+  //
+  // Currently we do all kinds of re-ordering of components/directives when instantiating
+  // directives. I think that is un-needed and we should simply use `getNodeInjectable`. This
+  // means that most of the guts of `createDirectivesAndLocals` should be ripped out and
+  // replaced with calls to `getNodeInjectable`.
   createDirectivesAndLocals(localRefs);
 
   // any immediate children of a component or template container must be pre-emptively
